@@ -4,15 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard de Seguimiento</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background-color:#f4f4f9;color:#333;display:flex;flex-direction:column;align-items:center;margin:0;padding:20px;min-height:100vh;box-sizing:border-box}
         .container{background-color:white;padding:30px 40px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.1);width:90%;max-width:900px}
         h1,h2,h3{color:#0d47a1}
         hr{border:0;border-top:1px solid #eee;margin:30px 0}
-        .hidden{display:none}
+        .hidden{display:none !important}
         #login-container{text-align:center;max-width:400px;width:100%;margin:auto}
         #login-container input{width:100%;padding:12px;margin-bottom:15px;border-radius:5px;border:1px solid #ccc;box-sizing:border-box;font-size:1em}
         #login-container button{width:100%;padding:12px;background-color:#0d47a1;color:white;border:none;border-radius:5px;font-size:1.1em;cursor:pointer;transition:background-color .3s}
@@ -29,17 +27,10 @@
         th{background-color:#1a237e;color:white}
         .horario-estimado{font-style:italic;color:#666}
         .tracker h2{text-align:center}
-        .export-button{background-color:#0d47a1;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;font-weight:bold;font-size:.9em;margin-top:10px;transition:background-color .3s;float:right}
-        .progress-display{background-color:#fdfdfd;border:1px solid #eaeaea;border-radius:8px;padding:20px;margin-top:10px;margin-bottom:25px;width:100%;box-sizing:border-box}
-        .progress-bar-wrapper{width:100%;position:relative;overflow-x:auto;overflow-y:hidden;padding-top:40px;margin-bottom:20px}
-        .progress-bar{position:relative;width:5000px;background-color:#e0e0e0;border-radius:8px;height:30px}
-        .progress{width:0%;height:100%;background-color:#4caf50;transition:width .5s ease-in-out;text-align:center;line-height:30px;color:white;font-weight:bold;z-index:1;position:relative;border-radius:8px 0 0 8px}
-        #pig-container{position:absolute;height:100%;top:0;z-index:3;transition:left .5s ease-in-out;display:flex;align-items:center}
-        .pig-indicator{position:relative;width:21px;height:21px;background-color:#e53935;border-radius:50%;border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,.5);animation:blink 1.2s infinite;cursor:pointer}
+        .info{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;text-align:left}
+        .resumen{background-color:#fdfdfd;border:1px solid #eaeaea;border-radius:8px;padding:20px;margin-bottom:25px;display:grid;grid-template-columns:1fr 1fr;gap:10px 20px}
         #filtros{display:flex;flex-wrap:wrap;gap:20px;margin-bottom:30px;align-items:center}
         select{padding:10px;border-radius:5px;border:1px solid #ccc;font-size:1em}
-        .resumen{background-color:#fdfdfd;border:1px solid #eaeaea;border-radius:8px;padding:20px;margin-bottom:25px;display:grid;grid-template-columns:1fr 1fr;gap:10px 20px}
-        .info{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;text-align:left}
         .message-box{text-align:center;color:#555;font-weight:bold;margin-top:20px;font-size:1.1em;padding:20px;background-color:#fafafa;border-radius:8px}
     </style>
 </head>
@@ -63,26 +54,10 @@
         </div>
 
         <div id="vivo" class="tab-content active">
-            <div class="tracker">
-                <button id="export-pdf-btn" class="export-button hidden">Exportar Reporte</button>
-                <h2>Seguimiento de Herramienta</h2>
-                <div id="activa-container" class="hidden">
-                    <div class="progress-display">
-                        <h3 id="ducto-nombre" style="margin-top:0;"></h3>
-                        <div class="progress-bar-wrapper"><div class="progress-bar" id="progress-bar-container"><div id="progress-fill" class="progress"></div><div id="pig-container"><div class="pig-indicator"></div></div></div></div>
-                    </div>
-                    <div class="info">
-                        <p><strong>Nº Limpieza:</strong> <span id="nro-limpieza"></span></p>
-                        <p><strong>Estado:</strong> <span id="estado"></span></p>
-                        <p><strong>Velocidad (est.):</strong> <span id="velocidad"></span></p>
-                        <p><strong>Progresiva (est.):</strong> <span id="progresiva"></span> mts</p>
-                        <p><strong>ETA Próximo CP:</strong> <span id="eta-proximo"></span></p>
-                        <p><strong>ETA Receptora:</strong> <span id="eta-final"></span></p>
-                        <p><strong>Método Cálculo:</strong> <span id="metodo-calculo"></span></p>
-                    </div>
+             <h2>Seguimiento de Herramienta</h2>
+             <div id="activa-container" class="hidden">
                 </div>
-                <div id="mensaje-container" class="message-box"><p>Cargando...</p></div>
-            </div>
+             <div id="mensaje-container" class="message-box"><p>Cargando...</p></div>
         </div>
 
         <div id="historial" class="tab-content">
@@ -142,7 +117,7 @@
         });
 
         function mostrarAplicacion() {
-            loginContainer.style.display = 'none';
+            loginContainer.classList.add('hidden');
             appContainer.classList.remove('hidden');
             iniciarDashboard();
         }
@@ -150,7 +125,7 @@
         // --- LÓGICA DEL DASHBOARD ---
         function iniciarDashboard() {
             actualizarProgreso();
-            setInterval(actualizarProgreso, 30000);
+            setInterval(actualizarProgreso, 60000); // Actualiza cada 1 minuto
             cargarDuctos();
         }
 
@@ -160,11 +135,10 @@
             document.getElementById(tabName).classList.add('active');
             event.currentTarget.classList.add('active');
         }
-
+        
         async function fetchSeguro(action, id = null) {
             const token = obtenerToken();
-            if (!token) { location.reload(); return; }
-
+            if (!token) { location.reload(); return Promise.reject("No token"); }
             let url = `${SCRIPT_URL}?action=${action}&token=${token}`;
             if (id) { url += `&id=${id}`; }
             
@@ -179,47 +153,35 @@
         // --- SEGUIMIENTO EN VIVO ---
         const activaContainer = document.getElementById('activa-container');
         const mensajeContainer = document.getElementById('mensaje-container');
-        const exportBtn = document.getElementById('export-pdf-btn');
-        let datosActualesParaReporte = null;
         
-        exportBtn.onclick = () => {
-             if (datosActualesParaReporte) {
-                const nombreArchivo = `Reporte_Limpieza_${datosActualesParaReporte.numeroLimpieza}.pdf`;
-                // Implementar la función de exportar a PDF para el vivo si se necesita
-             }
-        };
-
         async function actualizarProgreso() {
              try {
                 const data = await fetchSeguro('getVivo');
                 if (data.error) { throw new Error(data.error); }
                 
                 if (data.idLimpieza) {
-                    datosActualesParaReporte = data;
                     activaContainer.classList.remove('hidden');
                     mensajeContainer.classList.add('hidden');
-                    exportBtn.classList.remove('hidden');
-
-                    const { numeroLimpieza, nombreDucto, estado, estimacion } = data;
-                    document.getElementById('ducto-nombre').textContent = nombreDucto;
-                    document.getElementById('nro-limpieza').textContent = numeroLimpieza;
-                    document.getElementById('estado').textContent = estado;
-                    const velKmH = estimacion.velocidad_ms ? (estimacion.velocidad_ms * 3.6) : 0;
-                    document.getElementById('velocidad').textContent = estimacion.velocidad_ms ? `${velKmH.toFixed(2)} km/h` : '---';
-                    document.getElementById('progresiva').textContent = Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR');
-                    document.getElementById('eta-proximo').textContent = estimacion.etaProximo ? `${estimacion.etaProximo.nombre} ${estimacion.etaProximo.hora}` : '---';
-                    document.getElementById('eta-receptora').textContent = estimacion.etaFinal ? `${estimacion.etaFinal.hora}` : '---';
-                    document.getElementById('metodo-calculo').textContent = estimacion.metodoCalculo;
-                    document.getElementById('progress-fill').style.width = data.avance.porcentaje + '%';
-                    document.getElementById('pig-container').style.left = `calc(${data.avance.porcentaje}% - 10.5px)`;
-
+                    activaContainer.innerHTML = `
+                        <div class="progress-display">
+                            <h3 id="ducto-nombre" style="margin-top:0;">${data.nombreDucto}</h3>
+                        </div>
+                        <div class="info">
+                            <p><strong>Nº Limpieza:</strong> ${data.numeroLimpieza}</p>
+                            <p><strong>Estado:</strong> ${data.estado}</p>
+                            <p><strong>Velocidad (est.):</strong> ${(data.estimacion.velocidad_ms * 3.6).toFixed(2)} km/h</p>
+                            <p><strong>Progresiva (est.):</strong> ${Math.round(data.estimacion.progresivaEstimadaMts).toLocaleString('es-AR')} mts</p>
+                            <p><strong>ETA Próximo CP:</strong> ${data.estimacion.etaProximo ? data.estimacion.etaProximo.nombre + ' ' + data.estimacion.etaProximo.hora : '---'}</p>
+                            <p><strong>ETA Receptora:</strong> ${data.estimacion.etaFinal ? data.estimacion.etaFinal.hora : '---'}</p>
+                            <p><strong>Método Cálculo:</strong> ${data.estimacion.metodoCalculo}</p>
+                        </div>`;
                 } else if (data.ultimaCorrida) {
                     activaContainer.classList.add('hidden');
                     mensajeContainer.classList.remove('hidden');
                     mensajeContainer.querySelector('p').innerHTML = `No hay limpiezas activas.<br><br><strong>Última corrida finalizada:</strong><br>Nº: ${data.ultimaCorrida.numeroLimpieza} | Ducto: ${data.ultimaCorrida.nombreDucto}<br>Finalizó el ${data.ultimaCorrida.fecha} a las ${data.ultimaCorrida.hora} hs.<br>Duración Total: ${data.ultimaCorrida.duracion}`;
                 }
              } catch(error) {
-                mensajeContainer.querySelector('p').textContent = `Error: ${error.message}`;
+                mensajeContainer.querySelector('p').textContent = `Error al cargar datos en vivo: ${error.message}`;
              }
         }
         
@@ -239,7 +201,7 @@
                 ductoSelect.innerHTML = '<option value="">Seleccione un ducto</option>';
                 ductos.forEach(d => { ductoSelect.innerHTML += `<option value="${d.id}">${d.nombre}</option>`; });
             } catch (error) {
-                mensajeDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar ductos: ${error.message}</p>`;
             }
         }
 
@@ -249,9 +211,8 @@
             corridaSelect.disabled = true;
             corridaSelect.innerHTML = '<option value="">Cargando...</option>';
             mensajeDiv.classList.remove('hidden');
-            mensajeDiv.innerHTML = '<p>Seleccione corrida.</p>';
             if (!ductoId) {
-                corridaSelect.innerHTML = '<option value="">Seleccione un ducto primero</option>';
+                corridaSelect.innerHTML = '<option value="">Seleccione un ducto</option>';
                 return;
             }
             try {
@@ -264,13 +225,13 @@
                 corridas.forEach(c => { corridaSelect.innerHTML += `<option value="${c.id}">Nº ${c.nro} (${c.fecha})</option>`; });
                 corridaSelect.disabled = false;
             } catch (error) {
-                mensajeDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar corridas: ${error.message}</p>`;
             }
         }
 
         async function cargarResultados() {
             const corridaId = corridaSelect.value;
-            if (!corridaId) { resultadosContainer.classList.add('hidden'); mensajeDiv.classList.remove('hidden'); return; }
+            if (!corridaId) { resultadosContainer.classList.add('hidden'); return; }
             mensajeDiv.innerHTML = '<p>Cargando datos...</p>';
             try {
                 const data = await fetchSeguro('getHistorico', corridaId);
@@ -283,7 +244,7 @@
                 mensajeDiv.classList.add('hidden');
                 resultadosContainer.classList.remove('hidden');
             } catch (error) {
-                mensajeDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar resultados: ${error.message}</p>`;
                 resultadosContainer.classList.add('hidden');
             }
         }
