@@ -7,8 +7,25 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f4f9; color: #333; margin: 0; padding: 0; }
-        .header { background-color: #ffffff; padding: 10px 30px; border-bottom: 1px solid #e0e0e0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; align-items: center; }
-        .header img { height: 40px; }
+        
+        /* --- HEADER MODIFICADO --- */
+        .header {
+            background-color: #343a40; /* Color oscuro como en tu ejemplo */
+            padding: 10px 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px; /* Espacio entre el logo y el título */
+        }
+        .header img {
+            height: 40px;
+        }
+        .header-title {
+            color: #ffffff; /* Letras blancas para el contraste */
+            font-size: 1.5em;
+            margin: 0;
+            font-weight: 500;
+        }
+        
         .main-content { display: flex; justify-content: center; padding: 20px; }
         .container { background-color: white; padding: 30px 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 1600px; box-sizing: border-box; }
         h1, h2, h3 { color: #0d47a1; }
@@ -40,7 +57,7 @@
 <body>
 
     <div id="login-wrapper">
-        <div id="login-container" class="container">
+        <div class="container" id="login-container">
             <h1>Iniciar Sesión</h1>
             <form id="login-form">
                 <input type="text" id="username" placeholder="Usuario" required>
@@ -53,11 +70,11 @@
 
     <div id="app-container" class="hidden">
         <div class="header">
-            <img src="logo-petromark.png" alt="Logo Empresa">
+            <img src="logo.png" alt="Logo Empresa">
+            <h2 class="header-title">Dashboard PC</h2>
         </div>
         <div class="main-content">
             <div class="container">
-                <h1>Dashboard de Limpieza de Ductos</h1>
                 <div class="tab-nav">
                     <button class="tab-button active" onclick="openTab('vivo')">Seguimiento en Vivo</button>
                     <button class="tab-button" onclick="openTab('historial')">Historial de Corridas</button>
@@ -74,8 +91,6 @@
                                 <p><strong>Método Cálculo:</strong> <span id="metodo-calculo"></span></p>
                                 <p><strong>Velocidad (est.):</strong> <span id="velocidad"></span></p>
                                 <p><strong>Progresiva (est.):</strong> <span id="progresiva"></span> mts</p>
-                                <p><strong>ETA Próximo CP:</strong> <span id="eta-proximo"></span></p>
-                                <p><strong>ETA Receptora:</strong> <span id="eta-receptora"></span></p>
                             </div>
                         </div>
                         <div id="mensaje-container" class="message-box"><p>Cargando...</p></div>
@@ -107,11 +122,13 @@
     
     <script>
         const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2XU-wz9PzzAMsastd-6Gwj05VNpVS8oQnwv_8UG3GxYZq5-NHYS1qLy6OF6hidExvpA/exec";
-
+        
         const loginWrapper = document.getElementById('login-wrapper');
         const appContainer = document.getElementById('app-container');
         const loginForm = document.getElementById('login-form');
         const loginError = document.getElementById('login-error');
+        const ductoSelect = document.getElementById('ducto-select');
+        const corridaSelect = document.getElementById('corrida-select');
 
         function guardarToken(token) { sessionStorage.setItem('authToken', token); }
         function obtenerToken() { return sessionStorage.getItem('authToken'); }
@@ -186,8 +203,6 @@
                     const velKmH = estimacion.velocidad_ms ? (estimacion.velocidad_ms * 3.6) : 0;
                     document.getElementById('velocidad').textContent = estimacion.velocidad_ms ? `${velKmH.toFixed(2)} km/h` : '---';
                     document.getElementById('progresiva').textContent = Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR');
-                    document.getElementById('eta-proximo').textContent = estimacion.etaProximo ? `${estimacion.etaProximo.nombre} ${estimacion.etaProximo.hora}` : '---';
-                    document.getElementById('eta-receptora').textContent = estimacion.etaFinal ? `${estimacion.etaFinal.hora}` : '---';
                     document.getElementById('metodo-calculo').textContent = estimacion.metodoCalculo;
                 } else if (data.ultimaCorrida) {
                     activaContainer.classList.add('hidden');
@@ -198,9 +213,6 @@
                 if(mensajeContainer) mensajeContainer.querySelector('p').textContent = `Error al cargar datos en vivo: ${error.message}`;
              }
         }
-        
-        const ductoSelect = document.getElementById('ducto-select');
-        const corridaSelect = document.getElementById('corrida-select');
         
         async function cargarDuctos() {
             const mensajeDiv = document.getElementById('mensaje');
@@ -220,7 +232,7 @@
             resultadosContainer.classList.add('hidden');
             corridaSelect.disabled = true;
             corridaSelect.innerHTML = '<option value="">Cargando...</option>';
-            mensajeDiv.classList.remove('hidden');
+            if(mensajeDiv) mensajeDiv.classList.remove('hidden');
             if (!ductoId) {
                 corridaSelect.innerHTML = '<option value="">Seleccione un ducto</option>';
                 return;
@@ -244,8 +256,10 @@
             const resultadosContainer = document.getElementById('resultados-container');
             const mensajeDiv = document.getElementById('mensaje');
             if (!corridaId) { resultadosContainer.classList.add('hidden'); return; }
-            mensajeDiv.innerHTML = '<p>Cargando datos...</p>';
-            mensajeDiv.classList.remove('hidden');
+            if(mensajeDiv) {
+                mensajeDiv.innerHTML = '<p>Cargando datos...</p>';
+                mensajeDiv.classList.remove('hidden');
+            }
             try {
                 const data = await fetchSeguro('getHistorico', corridaId);
                 const resumenDiv = document.getElementById('resumen-corrida');
@@ -256,7 +270,7 @@
                     tablaBodyHistorial.innerHTML += `<tr><td>${cp.nombre}</td><td>${cp.progresiva.toLocaleString('es-AR')}</td><td>${cp.horario}</td></tr>`;
                 });
                 drawHistoricoChart(data.checkpoints);
-                mensajeDiv.classList.add('hidden');
+                if(mensajeDiv) mensajeDiv.classList.add('hidden');
                 resultadosContainer.classList.remove('hidden');
             } catch (error) {
                 if(mensajeDiv) mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar resultados: ${error.message}</p>`;
