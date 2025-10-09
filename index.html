@@ -28,29 +28,32 @@
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background-color: #1a237e; color: white; }
-        .horario-estimado { font-style: italic; color: #666; }
         .tracker h2 { text-align: center; }
         .info { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px 20px; text-align: left; }
         .resumen { background-color: #fdfdfd; border: 1px solid #eaeaea; border-radius: 8px; padding: 20px; margin-bottom: 25px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 20px; }
         #filtros { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 30px; align-items: center; }
         select { padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 1em; }
         .message-box { text-align: center; color: #555; font-weight: bold; margin-top: 20px; font-size: 1.1em; padding: 20px; background-color: #fafafa; border-radius: 8px; }
-
-        /* --- NUEVOS ESTILOS PARA EL LAYOUT DE HISTORIAL --- */
-        #historial-layout {
-            display: flex;
-            flex-wrap: wrap; /* Para que se apile en pantallas chicas */
-            gap: 30px;
-        }
-        #historial-datos {
-            flex: 2; /* Ocupa el doble de espacio que el gráfico */
-            min-width: 450px;
-        }
-        #historial-grafico {
-            flex: 1; /* Ocupa un tercio del espacio */
-            min-width: 350px;
-        }
-
+        #historial-layout { display: flex; flex-wrap: wrap; gap: 30px; }
+        #historial-datos { flex: 2; min-width: 450px; }
+        #historial-grafico { flex: 1; min-width: 350px; }
+        .progress-display { background-color: #fdfdfd; border: 1px solid #eaeaea; border-radius: 8px; padding: 20px; margin-top: 10px; margin-bottom: 25px; width: 100%; box-sizing: border-box; }
+        .progress-bar-wrapper { width: 100%; position: relative; overflow-x: auto; overflow-y: hidden; padding-top: 40px; margin-bottom: 20px; }
+        .progress-bar { position: relative; width: 5000px; background-color: #e0e0e0; border-radius: 8px; height: 30px; }
+        .progress { width: 0%; height: 100%; background-color: #4caf50; transition: width 0.5s ease-in-out; text-align: center; line-height: 30px; color: white; font-weight: bold; z-index: 1; position: relative; border-radius: 8px 0 0 8px; }
+        #pig-container { position: absolute; height: 100%; top: 0; z-index: 3; transition: left 0.5s ease-in-out; display: flex; align-items: center; }
+        .pig-indicator { position: relative; width: 21px; height: 21px; background-color: #e53935; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5); animation: blink 1.2s infinite; cursor: pointer; }
+        .pig-tooltip { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 10px; background-color: #333; color: white; padding: 6px 12px; border-radius: 5px; font-size: 14px; white-space: nowrap; opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s ease; z-index: 11; }
+        #pig-container:hover .pig-tooltip { opacity: 1; visibility: visible; }
+        @keyframes blink { 50% { opacity: .2; } }
+        .checkpoint-marker-container { position: absolute; top: 0; bottom: 0; transform: translateX(-50%); display: flex; justify-content: center; align-items: center; z-index: 2; }
+        .checkpoint-marker { width: 3px; height: 100%; background-color: #0d47a1; cursor: pointer; }
+        .tooltip { position: absolute; bottom: 100%; margin-bottom: 8px; background-color: #333; color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; white-space: nowrap; opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s ease; z-index: 10; }
+        .checkpoint-marker-container:hover .tooltip { opacity: 1; visibility: visible; }
+        tr.highlight { background-color: #dcedc8; font-weight: bold; }
+        .horario-estimado { font-style: italic; color: #666; }
+        .timer-display { background-color: #fffde7; border: 2px solid #ffc107; border-radius: 8px; padding: 12px; font-size: 1.2em; font-weight: bold; text-align: center; grid-column: 1 / -1; color: #5d4037; }
+        .footer { font-size: 0.8em; color: #777; text-align: right; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -80,7 +83,42 @@
                 </div>
 
                 <div id="vivo" class="tab-content active">
+                    <div class="tracker">
+                        <h2>Seguimiento de Herramienta</h2>
+                        <div id="activa-container" class="hidden">
+                            <div class="progress-display">
+                                <h3 id="ducto-nombre-vivo" style="text-align:center; margin-top:0;"></h3>
+                                <div class="progress-bar-wrapper">
+                                    <div class="progress-bar" id="progress-bar-container">
+                                        <div id="progress-fill" class="progress"></div>
+                                        <div id="pig-container">
+                                            <div class="pig-indicator"></div>
+                                            <div class="pig-tooltip" id="pig-tooltip-text"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="footer">Última actualización: <span id="update-time">--:--:--</span></p>
+                            </div>
+                            <div class="info">
+                                <p><strong>Ducto:</strong> <span id="ducto-nombre"></span></p>
+                                <p><strong>Nº Limpieza:</strong> <span id="nro-limpieza"></span></p>
+                                <p><strong>Estado:</strong> <span id="estado"></span></p>
+                                <p><strong>Método Cálculo:</strong> <span id="metodo-calculo"></span></p>
+                                <p><strong>Velocidad (est.):</strong> <span id="velocidad"></span></p>
+                                <p><strong>Progresiva (est.):</strong> <span id="progresiva"></span> mts</p>
+                                <p class="timer-display">Próximo CP (<span id="nombre-proximo-cp">...</span>) en: <span id="timer-proximo">--:--:--</span></p>
+                                <p class="timer-display">Llegada a Receptora en: <span id="timer-final">--:--:--</span></p>
+                            </div>
+                            <div class="table-container">
+                                <table>
+                                    <thead><tr><th>Checkpoint</th><th>Progresiva [mts]</th><th>Horario Pasada</th></tr></thead>
+                                    <tbody id="puntos-tabla-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div id="mensaje-container" class="message-box"><p>Cargando...</p></div>
                     </div>
+                </div>
 
                 <div id="historial" class="tab-content">
                     <div id="filtros">
@@ -90,7 +128,6 @@
                         <select id="corrida-select" disabled><option value="">Seleccione ducto</option></select>
                     </div>
                     <div id="mensaje"><p>Seleccione un ducto y una corrida para ver los detalles.</p></div>
-                    
                     <div id="resultados-container" class="hidden">
                         <div id="historial-layout">
                             <div id="historial-datos">
@@ -115,12 +152,15 @@
     <script>
         const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2XU-wz9PzzAMsastd-6Gwj05VNpVS8oQnwv_8UG3GxYZq5-NHYS1qLy6OF6hidExvpA/exec";
         
-        // --- El resto del script sigue igual, no necesita cambios en la lógica ---
         const loginWrapper = document.getElementById('login-wrapper');
         const appContainer = document.getElementById('app-container');
         const loginForm = document.getElementById('login-form');
         const ductoSelect = document.getElementById('ducto-select');
         const corridaSelect = document.getElementById('corrida-select');
+        let primeraCarga = true;
+        let timerInterval;
+        let etaProximoTimestamp = 0;
+        let etaFinalTimestamp = 0;
 
         function guardarToken(token) { sessionStorage.setItem('authToken', token); }
         function obtenerToken() { return sessionStorage.getItem('authToken'); }
@@ -151,23 +191,9 @@
         }
 
         function iniciarDashboard() {
-            document.getElementById('vivo').innerHTML = `
-                <div class="tracker">
-                    <h2>Seguimiento de Herramienta</h2>
-                    <div id="activa-container" class="hidden">
-                         <div class="info">
-                            <p><strong>Ducto:</strong> <span id="ducto-nombre"></span></p>
-                            <p><strong>Nº Limpieza:</strong> <span id="nro-limpieza"></span></p>
-                            <p><strong>Estado:</strong> <span id="estado"></span></p>
-                            <p><strong>Método Cálculo:</strong> <span id="metodo-calculo"></span></p>
-                            <p><strong>Velocidad (est.):</strong> <span id="velocidad"></span></p>
-                            <p><strong>Progresiva (est.):</strong> <span id="progresiva"></span> mts</p>
-                        </div>
-                    </div>
-                    <div id="mensaje-container" class="message-box"><p>Cargando...</p></div>
-                </div>`;
             actualizarProgreso();
             setInterval(actualizarProgreso, 60000);
+            iniciarTimers();
             cargarDuctos();
         }
 
@@ -190,10 +216,37 @@
             }
             return response.json();
         }
+        
+        function iniciarTimers() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                actualizarDisplayTimer('timer-proximo', etaProximoTimestamp);
+                actualizarDisplayTimer('timer-final', etaFinalTimestamp);
+            }, 1000);
+        }
+
+        function actualizarDisplayTimer(elementId, targetTimestamp) {
+            const span = document.getElementById(elementId);
+            if (!span || !targetTimestamp || targetTimestamp <= 0) {
+                if(span) span.textContent = "--:--:--";
+                return;
+            }
+            const ahora = new Date().getTime();
+            const diferencia = targetTimestamp - ahora;
+            if (diferencia <= 0) {
+                span.textContent = "00:00:00";
+                return;
+            }
+            const horas = Math.floor(diferencia / 36e5);
+            const minutos = Math.floor((diferencia % 36e5) / 6e4);
+            const segundos = Math.floor((diferencia % 6e4) / 1000);
+            span.textContent = `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
+        }
 
         async function actualizarProgreso() {
              const activaContainer = document.getElementById('activa-container');
              const mensajeContainer = document.getElementById('mensaje-container');
+             const updateTimeSpan = document.getElementById('update-time');
              try {
                 const data = await fetchSeguro('getVivo');
                 if (data.error) { throw new Error(data.error); }
@@ -201,14 +254,53 @@
                 if (data.idLimpieza) {
                     activaContainer.classList.remove('hidden');
                     if (mensajeContainer) mensajeContainer.classList.add('hidden');
-                    const { numeroLimpieza, nombreDucto, estado, estimacion } = data;
+                    const { numeroLimpieza, nombreDucto, estado, estimacion, avance, listaDePuntos, longitudTotalMts } = data;
+                    
+                    document.getElementById('ducto-nombre-vivo').textContent = nombreDucto;
                     document.getElementById('ducto-nombre').textContent = nombreDucto;
                     document.getElementById('nro-limpieza').textContent = numeroLimpieza;
                     document.getElementById('estado').textContent = estado;
                     const velKmH = estimacion.velocidad_ms ? (estimacion.velocidad_ms * 3.6) : 0;
-                    document.getElementById('velocidad').textContent = estimacion.velocidad_ms ? `${velKmH.toFixed(2)} km/h` : '---';
+                    document.getElementById('velocidad').textContent = estimacion.velocidad_ms ? `${velKmH.toFixed(2)} km/h (${estimacion.velocidad_ms.toFixed(2)} m/s)` : '---';
                     document.getElementById('progresiva').textContent = Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR');
                     document.getElementById('metodo-calculo').textContent = estimacion.metodoCalculo;
+
+                    etaProximoTimestamp = estimacion.etaProximo ? estimacion.etaProximo.timestamp : 0;
+                    etaFinalTimestamp = estimacion.etaFinal ? estimacion.etaFinal.timestamp : 0;
+                    document.getElementById('nombre-proximo-cp').textContent = estimacion.etaProximo ? estimacion.etaProximo.nombre : '...';
+                    
+                    document.getElementById('progress-fill').style.width = avance.porcentaje + '%';
+                    document.getElementById('progress-fill').textContent = avance.porcentaje.toFixed(1) + '%';
+                    document.getElementById('pig-container').style.left = `calc(${avance.porcentaje}% - 10.5px)`;
+                    document.getElementById('pig-tooltip-text').textContent = `${Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR')} mts`;
+
+                    const tablaBody = document.getElementById('puntos-tabla-body');
+                    const progressBar = document.getElementById('progress-bar-container');
+                    progressBar.querySelectorAll('.checkpoint-marker-container').forEach(el => el.remove());
+                    tablaBody.innerHTML = '';
+
+                    listaDePuntos.forEach(punto => {
+                        if (longitudTotalMts > 0) {
+                            const percent = (punto.progresiva / longitudTotalMts) * 100;
+                            const markerContainer = document.createElement('div');
+                            markerContainer.className = 'checkpoint-marker-container';
+                            markerContainer.style.left = percent + '%';
+                            markerContainer.innerHTML = `<div class="checkpoint-marker"></div><div class="tooltip">${punto.nombre} | ${(punto.progresiva / 1000).toFixed(2)} km</div>`;
+                            progressBar.appendChild(markerContainer);
+                        }
+
+                        const row = document.createElement('tr');
+                        let horarioHtml = punto.horaPasada ? (punto.horaPasada.includes('(') ? `<span class="horario-estimado">${punto.horaPasada}</span>` : punto.horaPasada) : '---';
+                        row.innerHTML = `<td>${punto.nombre}</td><td>${punto.progresiva.toLocaleString('es-AR')}</td><td>${horarioHtml}</td>`;
+                        if (data.ultimoPunto && data.ultimoPunto.nombre === punto.nombre) row.classList.add('highlight');
+                        tablaBody.appendChild(row);
+                    });
+
+                    if(primeraCarga){
+                        const wrapper = document.querySelector('.progress-bar-wrapper');
+                        wrapper.scrollTo({ left: (wrapper.scrollWidth * (avance.porcentaje / 100)) - (wrapper.clientWidth / 2) , behavior: 'auto' });
+                    }
+
                 } else if (data.ultimaCorrida) {
                     activaContainer.classList.add('hidden');
                     if (mensajeContainer) {
@@ -216,8 +308,12 @@
                         mensajeContainer.querySelector('p').innerHTML = `No hay limpiezas activas.<br><br><strong>Última corrida finalizada:</strong><br>Nº: ${data.ultimaCorrida.numeroLimpieza} | Ducto: ${data.ultimaCorrida.nombreDucto}<br>Finalizó el ${data.ultimaCorrida.fecha} a las ${data.ultimaCorrida.hora} hs.<br>Duración Total: ${data.ultimaCorrida.duracion}`;
                     }
                 }
+                primeraCarga = false;
              } catch(error) {
                 if(mensajeContainer) mensajeContainer.querySelector('p').textContent = `Error al cargar datos en vivo: ${error.message}`;
+             } finally {
+                // LÍNEA AÑADIDA PARA ACTUALIZAR LA HORA
+                if(updateTimeSpan) updateTimeSpan.textContent = new Date().toLocaleTimeString('es-AR');
              }
         }
         
