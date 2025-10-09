@@ -36,7 +36,7 @@
         .message-box { text-align: center; color: #555; font-weight: bold; margin-top: 20px; font-size: 1.1em; padding: 20px; background-color: #fafafa; border-radius: 8px; }
         #historial-layout { display: flex; flex-wrap: wrap; gap: 30px; }
         #historial-datos { flex: 2; min-width: 450px; }
-        #historial-grafico { flex: 1; min-width: 350px; }
+        #historial-graficos-container { flex: 1; min-width: 350px; display: flex; flex-direction: column; gap: 30px;}
         .progress-display { background-color: #fdfdfd; border: 1px solid #eaeaea; border-radius: 8px; padding: 20px; margin-top: 10px; margin-bottom: 25px; width: 100%; box-sizing: border-box; }
         .progress-bar-wrapper { width: 100%; position: relative; overflow-x: auto; overflow-y: hidden; padding-top: 40px; margin-bottom: 20px; }
         .progress-bar { position: relative; width: 5000px; background-color: #e0e0e0; border-radius: 8px; height: 30px; }
@@ -118,9 +118,16 @@
                                     <tbody></tbody>
                                 </table>
                             </div>
-                            <div id="historial-grafico">
-                                <h2>Perfil de Velocidad</h2>
-                                <div id="grafico-historico-container"><canvas id="velocityChartHistorico"></canvas></div>
+                            <div id="historial-graficos-container">
+                                <div id="historial-grafico-velocidad">
+                                    <h2>Perfil de Velocidad</h2>
+                                    <div id="grafico-historico-container"><canvas id="velocityChartHistorico"></canvas></div>
+                                </div>
+                                <hr>
+                                <div id="historial-grafico-suciedad">
+                                    <h2>Residuos Recolectados</h2>
+                                    <div id="grafico-suciedad-container"><canvas id="suciedadChart"></canvas></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -128,10 +135,10 @@
             </div>
         </div>
     </div>
-    
+   
     <script>
         const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2XU-wz9PzzAMsastd-6Gwj05VNpVS8oQnwv_8UG3GxYZq5-NHYS1qLy6OF6hidExvpA/exec";
-        
+       
         let timerInterval;
         let activeTimers = { proximo: 0, final: 0 };
         let primeraCargaDetalle = {};
@@ -184,7 +191,7 @@
             document.getElementById(tabName).classList.add('active');
             event.currentTarget.classList.add('active');
         }
-        
+       
         async function fetchSeguro(action, id = null) {
             const token = sessionStorage.getItem('authToken');
             if (!token) { location.reload(); return Promise.reject("No token"); }
@@ -192,8 +199,8 @@
             if (id) { url += `&id=${id}`; }
             const response = await fetch(url);
             if (!response.ok) {
-                 if (response.status === 401) { sessionStorage.removeItem('authToken'); location.reload(); }
-                 throw new Error(`Error: ${response.status}`);
+                   if (response.status === 401) { sessionStorage.removeItem('authToken'); location.reload(); }
+                   throw new Error(`Error: ${response.status}`);
             }
             return response.json();
         }
@@ -224,7 +231,7 @@
             const segundos = Math.floor((diferencia % 6e4) / 1000);
             span.textContent = `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
         }
-        
+       
         const listaCorridasContainer = document.getElementById('lista-corridas-container');
         const detalleCorridaContainer = document.getElementById('detalle-corrida-container');
 
@@ -339,7 +346,7 @@
                 detalleCorridaContainer.innerHTML = `<div class="message-box"><p style="color:red;">Error al cargar el detalle: ${error.message}</p></div>`;
             }
         }
-        
+       
         // --- HISTORIAL ---
         async function cargarDuctos() {
             const ductoSelect = document.getElementById('ducto-select');
@@ -361,30 +368,50 @@
             resultadosContainer.classList.add('hidden');
             corridaSelect.disabled = true;
             corridaSelect.innerHTML = '<option value="">Cargando...</option>';
-            if(mensajeDiv) mensajeDiv.classList.remove('hidden');
+            if (mensajeDiv) mensajeDiv.classList.remove('hidden');
+            
+            // Limpiar gráficos al cambiar de ducto
+            drawHistoricoChart(null);
+            drawSuciedadChart(null);
+
             if (!ductoId) {
                 corridaSelect.innerHTML = '<option value="">Seleccione un ducto</option>';
                 return;
             }
             try {
-                const corridas = await fetchSeguro('getCorridas', ductoId);
+                // Pedimos ambas cosas en paralelo para más eficiencia
+                const [corridas, suciedadData] = await Promise.all([
+                    fetchSeguro('getCorridas', ductoId),
+                    fetchSeguro('getSuciedadHistorico', ductoId)
+                ]);
+
                 if (corridas.length === 0) {
                     corridaSelect.innerHTML = '<option value="">No hay corridas</option>';
                     return;
                 }
+                
                 corridaSelect.innerHTML = '<option value="">Seleccione una corrida</option>';
                 corridas.forEach(c => { corridaSelect.innerHTML += `<option value="${c.id}">Nº ${c.nro} (${c.fecha})</option>`; });
                 corridaSelect.disabled = false;
+                
+                // Dibujar el gráfico de suciedad para el ducto seleccionado
+                drawSuciedadChart(suciedadData);
+
             } catch (error) {
-                if(mensajeDiv) mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar corridas.</p>`;
+                if (mensajeDiv) mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar datos del ducto: ${error.message}</p>`;
             }
         }
+
 
         async function cargarResultados() {
             const corridaId = document.getElementById('corrida-select').value;
             const resultadosContainer = document.getElementById('resultados-container');
             const mensajeDiv = document.getElementById('mensaje');
-            if (!corridaId) { resultadosContainer.classList.add('hidden'); return; }
+            if (!corridaId) {
+                resultadosContainer.classList.add('hidden');
+                drawHistoricoChart(null); // Limpia el gráfico de velocidad si no hay corrida
+                return;
+            }
             if(mensajeDiv) {
                 mensajeDiv.innerHTML = '<p>Cargando datos...</p>';
                 mensajeDiv.classList.remove('hidden');
@@ -393,12 +420,20 @@
                 const data = await fetchSeguro('getHistorico', corridaId);
                 const resumenDiv = document.getElementById('resumen-corrida');
                 const tablaBodyHistorial = document.querySelector('#tabla-historico tbody');
-                resumenDiv.innerHTML = `<p><strong>Ducto:</strong> ${data.resumen.nombreDucto}</p><p><strong>Nº Limpieza:</strong> ${data.resumen.nroLimpieza}</p><p><strong>Fecha:</strong> ${data.resumen.fecha}</p><p><strong>Duración Total:</strong> ${data.resumen.duracion}</p>`;
+                
+                let suciedadHtml = data.resumen.suciedadKg !== null ? 
+                    `<p><strong>Residuos [kg]:</strong> ${data.resumen.suciedadKg.toFixed(2)}</p>` : 
+                    `<p><strong>Residuos [kg]:</strong> N/D</p>`;
+
+                resumenDiv.innerHTML = `<p><strong>Ducto:</strong> ${data.resumen.nombreDucto}</p><p><strong>Nº Limpieza:</strong> ${data.resumen.nroLimpieza}</p><p><strong>Fecha:</strong> ${data.resumen.fecha}</p><p><strong>Duración Total:</strong> ${data.resumen.duracion}</p>${suciedadHtml}`;
+                
                 tablaBodyHistorial.innerHTML = '';
                 data.tabla.forEach(cp => {
                     tablaBodyHistorial.innerHTML += `<tr><td>${cp.nombre}</td><td>${cp.progresiva.toLocaleString('es-AR')}</td><td>${cp.horario}</td></tr>`;
                 });
+                
                 drawHistoricoChart(data.checkpoints);
+                
                 if(mensajeDiv) mensajeDiv.classList.add('hidden');
                 resultadosContainer.classList.remove('hidden');
             } catch (error) {
@@ -406,16 +441,15 @@
                 resultadosContainer.classList.add('hidden');
             }
         }
-        
+       
         let historicoChart;
         function drawHistoricoChart(checkpoints) {
             const chartCanvasHistorial = document.getElementById('velocityChartHistorico');
             if (historicoChart) { historicoChart.destroy(); }
             if (!checkpoints || checkpoints.length < 2) {
-                if (chartCanvasHistorial) chartCanvasHistorial.style.display = 'none';
+                if (chartCanvasHistorial) chartCanvasHistorial.getContext('2d').clearRect(0, 0, chartCanvasHistorial.width, chartCanvasHistorial.height);
                 return;
             };
-            if (chartCanvasHistorial) chartCanvasHistorial.style.display = 'block';
             const labels = [], data = [];
             for (let i = 1; i < checkpoints.length; i++) {
                 const pAnt = checkpoints[i-1], pAct = checkpoints[i];
@@ -435,7 +469,50 @@
                 options: { scales: { y: { beginAtZero: true, title: { display: true, text: 'Velocidad (km/h)'} } }, plugins: { legend: { display: false } } }
             });
         }
-        
+       
+        let suciedadChart;
+        function drawSuciedadChart(suciedadData) {
+            const chartCanvasSuciedad = document.getElementById('suciedadChart');
+            if (suciedadChart) { suciedadChart.destroy(); }
+            if (!suciedadData || suciedadData.length === 0) {
+                if (chartCanvasSuciedad) chartCanvasSuciedad.getContext('2d').clearRect(0, 0, chartCanvasSuciedad.width, chartCanvasSuciedad.height);
+                return;
+            };
+            
+            const labels = suciedadData.map(d => `Nº ${d.nro} (${d.fecha})`);
+            const data = suciedadData.map(d => d.suciedadKg);
+
+            suciedadChart = new Chart(chartCanvasSuciedad, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Suciedad (kg)',
+                        data: data,
+                        backgroundColor: 'rgba(139, 69, 19, 0.6)',
+                        borderColor: 'rgba(139, 69, 19, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Residuos (kg)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
         document.getElementById('ducto-select').addEventListener('change', cargarCorridas);
         document.getElementById('corrida-select').addEventListener('change', cargarResultados);
     </script>
