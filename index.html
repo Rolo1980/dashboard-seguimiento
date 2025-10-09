@@ -54,6 +54,13 @@
         .horario-estimado { font-style: italic; color: #666; }
         .timer-display { background-color: #fffde7; border: 2px solid #ffc107; border-radius: 8px; padding: 12px; font-size: 1.2em; font-weight: bold; text-align: center; grid-column: 1 / -1; color: #5d4037; }
         .footer { font-size: 0.8em; color: #777; text-align: right; margin-top: 15px; }
+        .lista-corridas-activas { display: flex; flex-direction: column; gap: 10px; }
+        .corrida-item { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px 20px; cursor: pointer; transition: background-color 0.2s, box-shadow 0.2s; }
+        .corrida-item:hover { background-color: #e9ecef; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .corrida-item h3 { margin: 0 0 5px 0; color: #0d47a1; }
+        .corrida-item p { margin: 0; color: #495057; }
+        .btn-volver { background-color: #6c757d; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
+        .btn-volver:hover { background-color: #5a6268; }
     </style>
 </head>
 <body>
@@ -84,39 +91,12 @@
 
                 <div id="vivo" class="tab-content active">
                     <div class="tracker">
-                        <h2>Seguimiento de Herramienta</h2>
-                        <div id="activa-container" class="hidden">
-                            <div class="progress-display">
-                                <h3 id="ducto-nombre-vivo" style="text-align:center; margin-top:0;"></h3>
-                                <div class="progress-bar-wrapper">
-                                    <div class="progress-bar" id="progress-bar-container">
-                                        <div id="progress-fill" class="progress"></div>
-                                        <div id="pig-container">
-                                            <div class="pig-indicator"></div>
-                                            <div class="pig-tooltip" id="pig-tooltip-text"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <p class="footer">Última actualización: <span id="update-time">--:--:--</span></p>
-                            </div>
-                            <div class="info">
-                                <p><strong>Ducto:</strong> <span id="ducto-nombre"></span></p>
-                                <p><strong>Nº Limpieza:</strong> <span id="nro-limpieza"></span></p>
-                                <p><strong>Estado:</strong> <span id="estado"></span></p>
-                                <p><strong>Método Cálculo:</strong> <span id="metodo-calculo"></span></p>
-                                <p><strong>Velocidad (est.):</strong> <span id="velocidad"></span></p>
-                                <p><strong>Progresiva (est.):</strong> <span id="progresiva"></span> mts</p>
-                                <p class="timer-display">Próximo CP (<span id="nombre-proximo-cp">...</span>) en: <span id="timer-proximo">--:--:--</span></p>
-                                <p class="timer-display">Llegada a Receptora en: <span id="timer-final">--:--:--</span></p>
-                            </div>
-                            <div class="table-container">
-                                <table>
-                                    <thead><tr><th>Checkpoint</th><th>Progresiva [mts]</th><th>Horario Pasada</th></tr></thead>
-                                    <tbody id="puntos-tabla-body"></tbody>
-                                </table>
-                            </div>
+                        <h2>Seguimiento en Vivo</h2>
+                        <div id="lista-corridas-container">
+                            <div class="message-box"><p>Buscando corridas activas...</p></div>
                         </div>
-                        <div id="mensaje-container" class="message-box"><p>Cargando...</p></div>
+                        <div id="detalle-corrida-container" class="hidden">
+                           </div>
                     </div>
                 </div>
 
@@ -152,20 +132,19 @@
     <script>
         const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2XU-wz9PzzAMsastd-6Gwj05VNpVS8oQnwv_8UG3GxYZq5-NHYS1qLy6OF6hidExvpA/exec";
         
-        const loginWrapper = document.getElementById('login-wrapper');
-        const appContainer = document.getElementById('app-container');
-        const loginForm = document.getElementById('login-form');
-        const ductoSelect = document.getElementById('ducto-select');
-        const corridaSelect = document.getElementById('corrida-select');
-        let primeraCarga = true;
         let timerInterval;
-        let etaProximoTimestamp = 0;
-        let etaFinalTimestamp = 0;
+        let activeTimers = { proximo: 0, final: 0 };
+        let primeraCargaDetalle = {};
 
-        function guardarToken(token) { sessionStorage.setItem('authToken', token); }
-        function obtenerToken() { return sessionStorage.getItem('authToken'); }
+        document.addEventListener('DOMContentLoaded', () => {
+            if (sessionStorage.getItem('authToken')) {
+                mostrarAplicacion();
+            } else {
+                document.getElementById('login-wrapper').classList.remove('hidden');
+            }
+        });
 
-        loginForm.addEventListener('submit', async (e) => {
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const loginError = document.getElementById('login-error');
             loginError.textContent = 'Verificando...';
@@ -174,27 +153,29 @@
                 const response = await fetch(url);
                 const result = await response.json();
                 if (result.status === 'success' && result.token) {
-                    guardarToken(result.token);
+                    sessionStorage.setItem('authToken', result.token);
                     mostrarAplicacion();
                 } else {
                     loginError.textContent = result.message || 'Error al iniciar sesión.';
                 }
             } catch (error) {
-                loginError.textContent = 'Error de conexión con el servidor.';
+                loginError.textContent = 'Error de conexión.';
             }
         });
 
         function mostrarAplicacion() {
-            loginWrapper.classList.add('hidden');
-            appContainer.classList.remove('hidden');
+            document.getElementById('login-wrapper').classList.add('hidden');
+            document.getElementById('app-container').classList.remove('hidden');
             iniciarDashboard();
         }
 
         function iniciarDashboard() {
-            actualizarProgreso();
-            setInterval(actualizarProgreso, 60000);
+            cargarCorridasActivas();
+            setInterval(cargarCorridasActivas, 60000);
             iniciarTimers();
             cargarDuctos();
+            document.getElementById('ducto-select').addEventListener('change', cargarCorridas);
+            document.getElementById('corrida-select').addEventListener('change', cargarResultados);
         }
 
         function openTab(tabName) {
@@ -205,30 +186,31 @@
         }
         
         async function fetchSeguro(action, id = null) {
-            const token = obtenerToken();
+            const token = sessionStorage.getItem('authToken');
             if (!token) { location.reload(); return Promise.reject("No token"); }
             let url = `${SCRIPT_URL}?action=${action}&token=${token}`;
             if (id) { url += `&id=${id}`; }
             const response = await fetch(url);
             if (!response.ok) {
                  if (response.status === 401) { sessionStorage.removeItem('authToken'); location.reload(); }
-                 throw new Error(`Error en la solicitud: ${response.status}`);
+                 throw new Error(`Error: ${response.status}`);
             }
             return response.json();
         }
-        
+
         function iniciarTimers() {
             if (timerInterval) clearInterval(timerInterval);
             timerInterval = setInterval(() => {
-                actualizarDisplayTimer('timer-proximo', etaProximoTimestamp);
-                actualizarDisplayTimer('timer-final', etaFinalTimestamp);
+                actualizarDisplayTimer('timer-proximo-detalle', activeTimers.proximo);
+                actualizarDisplayTimer('timer-final-detalle', activeTimers.final);
             }, 1000);
         }
 
         function actualizarDisplayTimer(elementId, targetTimestamp) {
             const span = document.getElementById(elementId);
-            if (!span || !targetTimestamp || targetTimestamp <= 0) {
-                if(span) span.textContent = "--:--:--";
+            if (!span) return;
+            if (!targetTimestamp || targetTimestamp <= 0) {
+                span.textContent = "--:--:--";
                 return;
             }
             const ahora = new Date().getTime();
@@ -242,82 +224,125 @@
             const segundos = Math.floor((diferencia % 6e4) / 1000);
             span.textContent = `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
         }
+        
+        const listaCorridasContainer = document.getElementById('lista-corridas-container');
+        const detalleCorridaContainer = document.getElementById('detalle-corrida-container');
 
-        async function actualizarProgreso() {
-             const activaContainer = document.getElementById('activa-container');
-             const mensajeContainer = document.getElementById('mensaje-container');
-             const updateTimeSpan = document.getElementById('update-time');
-             try {
+        async function cargarCorridasActivas() {
+            if (!detalleCorridaContainer.classList.contains('hidden')) return;
+            try {
                 const data = await fetchSeguro('getVivo');
-                if (data.error) { throw new Error(data.error); }
-                
-                if (data.idLimpieza) {
-                    activaContainer.classList.remove('hidden');
-                    if (mensajeContainer) mensajeContainer.classList.add('hidden');
-                    const { numeroLimpieza, nombreDucto, estado, estimacion, avance, listaDePuntos, longitudTotalMts } = data;
-                    
-                    document.getElementById('ducto-nombre-vivo').textContent = nombreDucto;
-                    document.getElementById('ducto-nombre').textContent = nombreDucto;
-                    document.getElementById('nro-limpieza').textContent = numeroLimpieza;
-                    document.getElementById('estado').textContent = estado;
-                    const velKmH = estimacion.velocidad_ms ? (estimacion.velocidad_ms * 3.6) : 0;
-                    document.getElementById('velocidad').textContent = estimacion.velocidad_ms ? `${velKmH.toFixed(2)} km/h (${estimacion.velocidad_ms.toFixed(2)} m/s)` : '---';
-                    document.getElementById('progresiva').textContent = Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR');
-                    document.getElementById('metodo-calculo').textContent = estimacion.metodoCalculo;
-
-                    etaProximoTimestamp = estimacion.etaProximo ? estimacion.etaProximo.timestamp : 0;
-                    etaFinalTimestamp = estimacion.etaFinal ? estimacion.etaFinal.timestamp : 0;
-                    document.getElementById('nombre-proximo-cp').textContent = estimacion.etaProximo ? estimacion.etaProximo.nombre : '...';
-                    
-                    document.getElementById('progress-fill').style.width = avance.porcentaje + '%';
-                    document.getElementById('progress-fill').textContent = avance.porcentaje.toFixed(1) + '%';
-                    document.getElementById('pig-container').style.left = `calc(${avance.porcentaje}% - 10.5px)`;
-                    document.getElementById('pig-tooltip-text').textContent = `${Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR')} mts`;
-
-                    const tablaBody = document.getElementById('puntos-tabla-body');
-                    const progressBar = document.getElementById('progress-bar-container');
-                    progressBar.querySelectorAll('.checkpoint-marker-container').forEach(el => el.remove());
-                    tablaBody.innerHTML = '';
-
-                    listaDePuntos.forEach(punto => {
-                        if (longitudTotalMts > 0) {
-                            const percent = (punto.progresiva / longitudTotalMts) * 100;
-                            const markerContainer = document.createElement('div');
-                            markerContainer.className = 'checkpoint-marker-container';
-                            markerContainer.style.left = percent + '%';
-                            markerContainer.innerHTML = `<div class="checkpoint-marker"></div><div class="tooltip">${punto.nombre} | ${(punto.progresiva / 1000).toFixed(2)} km</div>`;
-                            progressBar.appendChild(markerContainer);
-                        }
-
-                        const row = document.createElement('tr');
-                        let horarioHtml = punto.horaPasada ? (punto.horaPasada.includes('(') ? `<span class="horario-estimado">${punto.horaPasada}</span>` : punto.horaPasada) : '---';
-                        row.innerHTML = `<td>${punto.nombre}</td><td>${punto.progresiva.toLocaleString('es-AR')}</td><td>${horarioHtml}</td>`;
-                        if (data.ultimoPunto && data.ultimoPunto.nombre === punto.nombre) row.classList.add('highlight');
-                        tablaBody.appendChild(row);
-                    });
-
-                    if(primeraCarga){
-                        const wrapper = document.querySelector('.progress-bar-wrapper');
-                        wrapper.scrollTo({ left: (wrapper.scrollWidth * (avance.porcentaje / 100)) - (wrapper.clientWidth / 2) , behavior: 'auto' });
-                    }
-
-                } else if (data.ultimaCorrida) {
-                    activaContainer.classList.add('hidden');
-                    if (mensajeContainer) {
-                        mensajeContainer.classList.remove('hidden');
-                        mensajeContainer.querySelector('p').innerHTML = `No hay limpiezas activas.<br><br><strong>Última corrida finalizada:</strong><br>Nº: ${data.ultimaCorrida.numeroLimpieza} | Ducto: ${data.ultimaCorrida.nombreDucto}<br>Finalizó el ${data.ultimaCorrida.fecha} a las ${data.ultimaCorrida.hora} hs.<br>Duración Total: ${data.ultimaCorrida.duracion}`;
-                    }
+                if (data.error) throw new Error(data.error);
+                if (data.ultimaCorrida) {
+                    listaCorridasContainer.innerHTML = `<div class="message-box"><p>No hay limpiezas activas.<br><br><strong>Última corrida finalizada:</strong><br>Nº: ${data.ultimaCorrida.numeroLimpieza} | Ducto: ${data.ultimaCorrida.nombreDucto}<br>Finalizó el ${data.ultimaCorrida.fecha} a las ${data.ultimaCorrida.hora} hs.<br>Duración Total: ${data.ultimaCorrida.duracion}</p></div>`;
+                    return;
                 }
-                primeraCarga = false;
-             } catch(error) {
-                if(mensajeContainer) mensajeContainer.querySelector('p').textContent = `Error al cargar datos en vivo: ${error.message}`;
-             } finally {
-                // LÍNEA AÑADIDA PARA ACTUALIZAR LA HORA
-                if(updateTimeSpan) updateTimeSpan.textContent = new Date().toLocaleTimeString('es-AR');
-             }
+                if (Array.isArray(data) && data.length > 0) {
+                    listaCorridasContainer.innerHTML = `<h3>Seleccione una corrida para ver el detalle:</h3>`;
+                    const listaDiv = document.createElement('div');
+                    listaDiv.className = 'lista-corridas-activas';
+                    data.forEach(corrida => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'corrida-item';
+                        itemDiv.dataset.id = corrida.id;
+                        itemDiv.innerHTML = `<h3>Nº ${corrida.nro}</h3><p>${corrida.nombreDucto}</p>`;
+                        itemDiv.addEventListener('click', () => mostrarDetalleVivo(corrida.id));
+                        listaDiv.appendChild(itemDiv);
+                    });
+                    listaCorridasContainer.appendChild(listaDiv);
+                } else {
+                    listaCorridasContainer.innerHTML = `<div class="message-box"><p>No se encontraron corridas activas.</p></div>`;
+                }
+            } catch(error) {
+                listaCorridasContainer.innerHTML = `<div class="message-box"><p style="color:red;">Error al cargar corridas: ${error.message}</p></div>`;
+            }
+        }
+
+        async function mostrarDetalleVivo(idLimpieza) {
+            listaCorridasContainer.classList.add('hidden');
+            detalleCorridaContainer.classList.remove('hidden');
+            detalleCorridaContainer.innerHTML = `<div class="message-box"><p>Cargando detalle...</p></div>`;
+            try {
+                const data = await fetchSeguro('getDetalleVivo', idLimpieza);
+                if (data.error) throw new Error(data.error);
+                detalleCorridaContainer.innerHTML = `
+                    <button id="btn-volver-lista" class="btn-volver">&larr; Volver a la lista</button>
+                    <div id="activa-container">
+                        <div class="progress-display">
+                            <h3 style="text-align:center; margin-top:0;">${data.nombreDucto}</h3>
+                            <div class="progress-bar-wrapper">
+                                <div class="progress-bar" id="progress-bar-container">
+                                    <div id="progress-fill" class="progress"></div>
+                                    <div id="pig-container"><div class="pig-indicator"></div><div class="pig-tooltip" id="pig-tooltip-text"></div></div>
+                                </div>
+                            </div>
+                            <p class="footer">Última actualización: <span id="update-time">--:--:--</span></p>
+                        </div>
+                        <div class="info">
+                             <p><strong>Nº Limpieza:</strong> ${data.numeroLimpieza}</p>
+                            <p><strong>Estado:</strong> ${data.estado}</p>
+                            <p><strong>Velocidad (est.):</strong> <span id="velocidad-detalle"></span></p>
+                            <p><strong>Progresiva (est.):</strong> <span id="progresiva-detalle"></span> mts</p>
+                            <p><strong>Método Cálculo:</strong> ${data.estimacion.metodoCalculo}</p>
+                            <p><strong>ETA Receptora:</strong> ${data.estimacion.etaFinal ? data.estimacion.etaFinal.hora : '---'}</p>
+                            <p class="timer-display">Próximo CP (<span id="nombre-proximo-cp-detalle">...</span>) en: <span id="timer-proximo-detalle">--:--:--</span></p>
+                            <p class="timer-display">Llegada a Receptora en: <span id="timer-final-detalle">--:--:--</span></p>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead><tr><th>Checkpoint</th><th>Progresiva [mts]</th><th>Horario Pasada</th></tr></thead>
+                                <tbody id="puntos-tabla-body-detalle"></tbody>
+                            </table>
+                        </div>
+                    </div>`;
+                document.getElementById('btn-volver-lista').addEventListener('click', () => {
+                    detalleCorridaContainer.classList.add('hidden');
+                    listaCorridasContainer.classList.remove('hidden');
+                    cargarCorridasActivas();
+                });
+                const { estimacion, avance, listaDePuntos, longitudTotalMts } = data;
+                document.getElementById('velocidad-detalle').textContent = estimacion.velocidad_ms ? `${(estimacion.velocidad_ms * 3.6).toFixed(2)} km/h (${estimacion.velocidad_ms.toFixed(2)} m/s)` : '---';
+                document.getElementById('progresiva-detalle').textContent = Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR');
+                document.getElementById('progress-fill').style.width = avance.porcentaje + '%';
+                document.getElementById('progress-fill').textContent = avance.porcentaje.toFixed(1) + '%';
+                document.getElementById('pig-container').style.left = `calc(${avance.porcentaje}% - 10.5px)`;
+                document.getElementById('pig-tooltip-text').textContent = `${Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR')} mts`;
+                document.getElementById('update-time').textContent = new Date().toLocaleTimeString('es-AR');
+                activeTimers.proximo = estimacion.etaProximo ? estimacion.etaProximo.timestamp : 0;
+                activeTimers.final = estimacion.etaFinal ? estimacion.etaFinal.timestamp : 0;
+                document.getElementById('nombre-proximo-cp-detalle').textContent = estimacion.etaProximo ? estimacion.etaProximo.nombre : '...';
+                const tablaBody = document.getElementById('puntos-tabla-body-detalle');
+                const progressBar = document.getElementById('progress-bar-container');
+                tablaBody.innerHTML = '';
+                progressBar.querySelectorAll('.checkpoint-marker-container').forEach(el => el.remove());
+                listaDePuntos.forEach(punto => {
+                    if(longitudTotalMts > 0){
+                        const percent = (punto.progresiva / longitudTotalMts) * 100;
+                        const marker = document.createElement('div');
+                        marker.className = 'checkpoint-marker-container';
+                        marker.style.left = percent + '%';
+                        marker.innerHTML = `<div class="checkpoint-marker"></div><div class="tooltip">${punto.nombre} | ${(punto.progresiva / 1000).toFixed(2)} km</div>`;
+                        progressBar.appendChild(marker);
+                    }
+                    const row = document.createElement('tr');
+                    let horarioHtml = punto.horaPasada ? (punto.horaPasada.includes('(') ? `<span class="horario-estimado">${punto.horaPasada}</span>` : punto.horaPasada) : '---';
+                    row.innerHTML = `<td>${punto.nombre}</td><td>${punto.progresiva.toLocaleString('es-AR')}</td><td>${horarioHtml}</td>`;
+                    if (data.ultimoPunto && data.ultimoPunto.nombre === punto.nombre) row.classList.add('highlight');
+                    tablaBody.appendChild(row);
+                });
+                 if(!primeraCargaDetalle[idLimpieza]){
+                    const wrapper = document.querySelector('.progress-bar-wrapper');
+                    wrapper.scrollTo({ left: (wrapper.scrollWidth * (avance.porcentaje / 100)) - (wrapper.clientWidth / 2) , behavior: 'auto' });
+                    primeraCargaDetalle[idLimpieza] = true;
+                }
+            } catch (error) {
+                detalleCorridaContainer.innerHTML = `<div class="message-box"><p style="color:red;">Error al cargar el detalle: ${error.message}</p></div>`;
+            }
         }
         
+        // --- HISTORIAL ---
         async function cargarDuctos() {
+            const ductoSelect = document.getElementById('ducto-select');
             const mensajeDiv = document.getElementById('mensaje');
             try {
                 const ductos = await fetchSeguro('getDuctos');
@@ -329,7 +354,8 @@
         }
 
         async function cargarCorridas() {
-            const ductoId = ductoSelect.value;
+            const corridaSelect = document.getElementById('corrida-select');
+            const ductoId = document.getElementById('ducto-select').value;
             const resultadosContainer = document.getElementById('resultados-container');
             const mensajeDiv = document.getElementById('mensaje');
             resultadosContainer.classList.add('hidden');
@@ -355,7 +381,7 @@
         }
 
         async function cargarResultados() {
-            const corridaId = corridaSelect.value;
+            const corridaId = document.getElementById('corrida-select').value;
             const resultadosContainer = document.getElementById('resultados-container');
             const mensajeDiv = document.getElementById('mensaje');
             if (!corridaId) { resultadosContainer.classList.add('hidden'); return; }
@@ -409,17 +435,9 @@
                 options: { scales: { y: { beginAtZero: true, title: { display: true, text: 'Velocidad (km/h)'} } }, plugins: { legend: { display: false } } }
             });
         }
-
-        ductoSelect.addEventListener('change', cargarCorridas);
-        corridaSelect.addEventListener('change', cargarResultados);
         
-        document.addEventListener('DOMContentLoaded', () => {
-            if (obtenerToken()) {
-                mostrarAplicacion();
-            } else {
-                loginWrapper.classList.remove('hidden');
-            }
-        });
+        document.getElementById('ducto-select').addEventListener('change', cargarCorridas);
+        document.getElementById('corrida-select').addEventListener('change', cargarResultados);
     </script>
 </body>
 </html>
