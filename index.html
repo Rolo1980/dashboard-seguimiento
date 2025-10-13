@@ -61,6 +61,40 @@
         .corrida-item p { margin: 0; color: #495057; }
         .btn-volver { background-color: #6c757d; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
         .btn-volver:hover { background-color: #5a6268; }
+        #programacion-layout { display: flex; flex-wrap: wrap; gap: 30px; }
+        #programacion-calendario { flex: 3; min-width: 400px; }
+        #programacion-resumen { flex: 2; min-width: 350px; }
+        .ducto-card { background-color: #fff; border: 1px solid #e0e0e0; border-left: 5px solid #1e88e5; border-radius: 8px; padding: 20px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .ducto-card h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .ducto-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+        .ducto-card-grid p { margin: 0; font-size: 0.9em; }
+        .ducto-card-grid strong { color: #333; }
+        .status-ok { color: #388e3c; }
+        .status-due { color: #f57c00; font-weight: bold; }
+        .status-overdue { color: #d32f2f; font-weight: bold; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+        .calendar-header, .calendar-day { text-align: center; padding: 10px; border-radius: 4px; }
+        .calendar-header { background-color: #1a237e; color: white; font-weight: bold; }
+        .calendar-day { background-color: #f5f5f5; min-height: 80px; font-size: 0.8em; }
+        .calendar-day.other-month { color: #ccc; }
+        .calendar-day .day-number { font-weight: bold; font-size: 1.2em; }
+        .calendar-event { background-color: #1e88e5; color: white; padding: 3px 5px; border-radius: 3px; font-size: 0.85em; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        /* --- ESTILOS PARA EL NUEVO BOTÓN DE CERRAR SESIÓN --- */
+        #logout-btn {
+            margin-left: auto; /* Empuja el botón a la derecha */
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        #logout-btn:hover {
+            background-color: #c82333;
+        }
     </style>
 </head>
 <body>
@@ -81,12 +115,14 @@
         <div class="header">
             <img src="logo.png" alt="Logo Empresa">
             <h2 class="header-title">Dashboard PC</h2>
+            <button id="logout-btn">Cerrar Sesión</button>
         </div>
         <div class="main-content">
             <div class="container">
                 <div class="tab-nav">
-                    <button class="tab-button active" onclick="openTab('vivo')">Seguimiento en Vivo</button>
-                    <button class="tab-button" onclick="openTab('historial')">Historial de Corridas</button>
+                    <button class="tab-button active" onclick="openTab(event, 'vivo')">Seguimiento en Vivo</button>
+                    <button class="tab-button" onclick="openTab(event, 'historial')">Historial de Corridas</button>
+                    <button class="tab-button" onclick="openTab(event, 'programacion')">Programación</button>
                 </div>
 
                 <div id="vivo" class="tab-content active">
@@ -95,8 +131,7 @@
                         <div id="lista-corridas-container">
                             <div class="message-box"><p>Buscando corridas activas...</p></div>
                         </div>
-                        <div id="detalle-corrida-container" class="hidden">
-                           </div>
+                        <div id="detalle-corrida-container" class="hidden"></div>
                     </div>
                 </div>
 
@@ -132,17 +167,44 @@
                         </div>
                     </div>
                 </div>
+
+                <div id="programacion" class="tab-content">
+                    <div id="programacion-layout">
+                        <div id="programacion-calendario">
+                            <h2>Calendario de Próximas Limpiezas</h2>
+                            <div id="calendario-controles">
+                                <button id="prev-month">&lt;</button>
+                                <h3 id="calendar-title" style="display: inline-block; margin: 0 20px;"></h3>
+                                <button id="next-month">&gt;</button>
+                            </div>
+                            <div id="calendar-grid" class="calendar-grid"></div>
+                        </div>
+                        <div id="programacion-resumen">
+                            <h2>Resumen de Ductos</h2>
+                            <div id="resumen-ductos-container">
+                                <div class="message-box"><p>Cargando resúmenes...</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
    
     <script>
+        // --- Variables Globales ---
         const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2XU-wz9PzzAMsastd-6Gwj05VNpVS8oQnwv_8UG3GxYZq5-NHYS1qLy6OF6hidExvpA/exec";
-       
         let timerInterval;
+        let detalleInterval; // <-- NUEVA VARIABLE para el intervalo del detalle
         let activeTimers = { proximo: 0, final: 0 };
         let primeraCargaDetalle = {};
+        let historicoChart, suciedadChart;
+        let programacionCargada = false;
+        let calendarioData = [];
+        let currentCalendarDate = new Date();
 
+        // --- Inicialización ---
         document.addEventListener('DOMContentLoaded', () => {
             if (sessionStorage.getItem('authToken')) {
                 mostrarAplicacion();
@@ -151,6 +213,7 @@
             }
         });
 
+        // --- Lógica de Login y Logout ---
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const loginError = document.getElementById('login-error');
@@ -177,19 +240,33 @@
         }
 
         function iniciarDashboard() {
-            cargarCorridasActivas();
+            // Se actualiza la lista cada 60 segundos
             setInterval(cargarCorridasActivas, 60000);
+            cargarCorridasActivas();
+            
             iniciarTimers();
             cargarDuctos();
             document.getElementById('ducto-select').addEventListener('change', cargarCorridas);
             document.getElementById('corrida-select').addEventListener('change', cargarResultados);
+            document.getElementById('prev-month').addEventListener('click', () => changeMonth(-1));
+            document.getElementById('next-month').addEventListener('click', () => changeMonth(1));
+
+            // Lógica del botón de logout
+            document.getElementById('logout-btn').addEventListener('click', () => {
+                sessionStorage.removeItem('authToken');
+                location.reload();
+            });
         }
 
-        function openTab(tabName) {
+        // --- Navegación por Tabs ---
+        function openTab(evt, tabName) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
-            event.currentTarget.classList.add('active');
+            evt.currentTarget.classList.add('active');
+            if (tabName === 'programacion' && !programacionCargada) {
+                cargarProgramacion();
+            }
         }
        
         async function fetchSeguro(action, id = null) {
@@ -200,31 +277,30 @@
             const response = await fetch(url);
             if (!response.ok) {
                    if (response.status === 401) { sessionStorage.removeItem('authToken'); location.reload(); }
-                   throw new Error(`Error: ${response.status}`);
+                   const errorData = await response.json();
+                   throw new Error(errorData.error || `Error: ${response.status}`);
             }
             return response.json();
         }
 
+        // --- Lógica de Timers ---
         function iniciarTimers() {
-            if (timerInterval) clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                actualizarDisplayTimer('timer-proximo-detalle', activeTimers.proximo);
-                actualizarDisplayTimer('timer-final-detalle', activeTimers.final);
-            }, 1000);
+             if (timerInterval) clearInterval(timerInterval);
+             timerInterval = setInterval(() => {
+                 actualizarDisplayTimer('timer-proximo-detalle', activeTimers.proximo);
+                 actualizarDisplayTimer('timer-final-detalle', activeTimers.final);
+             }, 1000);
         }
 
         function actualizarDisplayTimer(elementId, targetTimestamp) {
             const span = document.getElementById(elementId);
             if (!span) return;
             if (!targetTimestamp || targetTimestamp <= 0) {
-                span.textContent = "--:--:--";
-                return;
+                span.textContent = "--:--:--"; return;
             }
-            const ahora = new Date().getTime();
-            const diferencia = targetTimestamp - ahora;
+            const diferencia = targetTimestamp - new Date().getTime();
             if (diferencia <= 0) {
-                span.textContent = "00:00:00";
-                return;
+                span.textContent = "00:00:00"; return;
             }
             const horas = Math.floor(diferencia / 36e5);
             const minutos = Math.floor((diferencia % 36e5) / 6e4);
@@ -232,11 +308,11 @@
             span.textContent = `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
         }
        
-        const listaCorridasContainer = document.getElementById('lista-corridas-container');
-        const detalleCorridaContainer = document.getElementById('detalle-corrida-container');
-
+        // --- Lógica de "Seguimiento en Vivo" (MODIFICADA) ---
         async function cargarCorridasActivas() {
+            const detalleCorridaContainer = document.getElementById('detalle-corrida-container');
             if (!detalleCorridaContainer.classList.contains('hidden')) return;
+            const listaCorridasContainer = document.getElementById('lista-corridas-container');
             try {
                 const data = await fetchSeguro('getVivo');
                 if (data.error) throw new Error(data.error);
@@ -264,67 +340,97 @@
                 listaCorridasContainer.innerHTML = `<div class="message-box"><p style="color:red;">Error al cargar corridas: ${error.message}</p></div>`;
             }
         }
-
+        
         async function mostrarDetalleVivo(idLimpieza) {
+            if (detalleInterval) clearInterval(detalleInterval); // Limpia cualquier intervalo anterior
+
+            const listaCorridasContainer = document.getElementById('lista-corridas-container');
+            const detalleCorridaContainer = document.getElementById('detalle-corrida-container');
             listaCorridasContainer.classList.add('hidden');
             detalleCorridaContainer.classList.remove('hidden');
-            detalleCorridaContainer.innerHTML = `<div class="message-box"><p>Cargando detalle...</p></div>`;
+            
+            // Crea la estructura HTML una sola vez
+            detalleCorridaContainer.innerHTML = `
+                <button id="btn-volver-lista" class="btn-volver">&larr; Volver a la lista</button>
+                <div id="activa-container">
+                    <div class="progress-display">
+                        <h3 id="detalle-ducto-nombre" style="text-align:center; margin-top:0;">Cargando...</h3>
+                        <div class="progress-bar-wrapper">
+                            <div class="progress-bar" id="progress-bar-container">
+                                <div id="progress-fill" class="progress"></div>
+                                <div id="pig-container"><div class="pig-indicator"></div><div class="pig-tooltip" id="pig-tooltip-text"></div></div>
+                            </div>
+                        </div>
+                        <p class="footer">Última actualización: <span id="update-time">--:--:--</span></p>
+                    </div>
+                    <div class="info">
+                        <p><strong>Nº Limpieza:</strong> <span id="detalle-nro-limpieza"></span></p>
+                        <p><strong>Estado:</strong> <span id="detalle-estado"></span></p>
+                        <p><strong>Velocidad (est.):</strong> <span id="velocidad-detalle"></span></p>
+                        <p><strong>Progresiva (est.):</strong> <span id="progresiva-detalle"></span> mts</p>
+                        <p><strong>Método Cálculo:</strong> <span id="detalle-metodo"></span></p>
+                        <p><strong>ETA Receptora:</strong> <span id="detalle-eta-final"></span></p>
+                        <p class="timer-display">Próximo CP (<span id="nombre-proximo-cp-detalle">...</span>) en: <span id="timer-proximo-detalle">--:--:--</span></p>
+                        <p class="timer-display">Llegada a Receptora en: <span id="timer-final-detalle">--:--:--</span></p>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead><tr><th>Checkpoint</th><th>Progresiva [mts]</th><th>Horario Pasada</th></tr></thead>
+                            <tbody id="puntos-tabla-body-detalle"></tbody>
+                        </table>
+                    </div>
+                </div>`;
+
+            document.getElementById('btn-volver-lista').addEventListener('click', () => {
+                clearInterval(detalleInterval); // DETIENE la actualización automática
+                detalleCorridaContainer.classList.add('hidden');
+                listaCorridasContainer.classList.remove('hidden');
+                cargarCorridasActivas();
+            });
+
+            // Llama a la función de actualización inmediatamente, y luego cada 30 segundos
+            actualizarDetalleVivo(idLimpieza);
+            detalleInterval = setInterval(() => actualizarDetalleVivo(idLimpieza), 30000); 
+        }
+
+        async function actualizarDetalleVivo(idLimpieza) {
             try {
                 const data = await fetchSeguro('getDetalleVivo', idLimpieza);
-                if (data.error) throw new Error(data.error);
-                detalleCorridaContainer.innerHTML = `
-                    <button id="btn-volver-lista" class="btn-volver">&larr; Volver a la lista</button>
-                    <div id="activa-container">
-                        <div class="progress-display">
-                            <h3 style="text-align:center; margin-top:0;">${data.nombreDucto}</h3>
-                            <div class="progress-bar-wrapper">
-                                <div class="progress-bar" id="progress-bar-container">
-                                    <div id="progress-fill" class="progress"></div>
-                                    <div id="pig-container"><div class="pig-indicator"></div><div class="pig-tooltip" id="pig-tooltip-text"></div></div>
-                                </div>
-                            </div>
-                            <p class="footer">Última actualización: <span id="update-time">--:--:--</span></p>
-                        </div>
-                        <div class="info">
-                             <p><strong>Nº Limpieza:</strong> ${data.numeroLimpieza}</p>
-                            <p><strong>Estado:</strong> ${data.estado}</p>
-                            <p><strong>Velocidad (est.):</strong> <span id="velocidad-detalle"></span></p>
-                            <p><strong>Progresiva (est.):</strong> <span id="progresiva-detalle"></span> mts</p>
-                            <p><strong>Método Cálculo:</strong> ${data.estimacion.metodoCalculo}</p>
-                            <p><strong>ETA Receptora:</strong> ${data.estimacion.etaFinal ? data.estimacion.etaFinal.hora : '---'}</p>
-                            <p class="timer-display">Próximo CP (<span id="nombre-proximo-cp-detalle">...</span>) en: <span id="timer-proximo-detalle">--:--:--</span></p>
-                            <p class="timer-display">Llegada a Receptora en: <span id="timer-final-detalle">--:--:--</span></p>
-                        </div>
-                        <div class="table-container">
-                            <table>
-                                <thead><tr><th>Checkpoint</th><th>Progresiva [mts]</th><th>Horario Pasada</th></tr></thead>
-                                <tbody id="puntos-tabla-body-detalle"></tbody>
-                            </table>
-                        </div>
-                    </div>`;
-                document.getElementById('btn-volver-lista').addEventListener('click', () => {
-                    detalleCorridaContainer.classList.add('hidden');
-                    listaCorridasContainer.classList.remove('hidden');
-                    cargarCorridasActivas();
-                });
-                const { estimacion, avance, listaDePuntos, longitudTotalMts } = data;
-                document.getElementById('velocidad-detalle').textContent = estimacion.velocidad_ms ? `${(estimacion.velocidad_ms * 3.6).toFixed(2)} km/h (${estimacion.velocidad_ms.toFixed(2)} m/s)` : '---';
-                document.getElementById('progresiva-detalle').textContent = Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR');
-                document.getElementById('progress-fill').style.width = avance.porcentaje + '%';
-                document.getElementById('progress-fill').textContent = avance.porcentaje.toFixed(1) + '%';
-                document.getElementById('pig-container').style.left = `calc(${avance.porcentaje}% - 10.5px)`;
-                document.getElementById('pig-tooltip-text').textContent = `${Math.round(estimacion.progresivaEstimadaMts).toLocaleString('es-AR')} mts`;
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Actualizar todos los campos con los nuevos datos
+                document.getElementById('detalle-ducto-nombre').textContent = data.nombreDucto;
+                document.getElementById('detalle-nro-limpieza').textContent = data.numeroLimpieza;
+                document.getElementById('detalle-estado').textContent = data.estado;
+                document.getElementById('velocidad-detalle').textContent = data.estimacion.velocidad_ms ? `${(data.estimacion.velocidad_ms * 3.6).toFixed(2)} km/h (${data.estimacion.velocidad_ms.toFixed(2)} m/s)` : '---';
+                document.getElementById('progresiva-detalle').textContent = Math.round(data.estimacion.progresivaEstimadaMts).toLocaleString('es-AR');
+                document.getElementById('detalle-metodo').textContent = data.estimacion.metodoCalculo;
+                document.getElementById('detalle-eta-final').textContent = data.estimacion.etaFinal ? data.estimacion.etaFinal.hora : '---';
                 document.getElementById('update-time').textContent = new Date().toLocaleTimeString('es-AR');
-                activeTimers.proximo = estimacion.etaProximo ? estimacion.etaProximo.timestamp : 0;
-                activeTimers.final = estimacion.etaFinal ? estimacion.etaFinal.timestamp : 0;
-                document.getElementById('nombre-proximo-cp-detalle').textContent = estimacion.etaProximo ? estimacion.etaProximo.nombre : '...';
+                
+                document.getElementById('progress-fill').style.width = data.avance.porcentaje + '%';
+                document.getElementById('progress-fill').textContent = data.avance.porcentaje.toFixed(1) + '%';
+                document.getElementById('pig-container').style.left = `calc(${data.avance.porcentaje}% - 10.5px)`;
+                document.getElementById('pig-tooltip-text').textContent = `${Math.round(data.estimacion.progresivaEstimadaMts).toLocaleString('es-AR')} mts`;
+                
+                activeTimers.proximo = data.estimacion.etaProximo ? data.estimacion.etaProximo.timestamp : 0;
+                activeTimers.final = data.estimacion.etaFinal ? data.estimacion.etaFinal.timestamp : 0;
+                document.getElementById('nombre-proximo-cp-detalle').textContent = data.estimacion.etaProximo ? data.estimacion.etaProximo.nombre : '...';
+                
                 const tablaBody = document.getElementById('puntos-tabla-body-detalle');
                 const progressBar = document.getElementById('progress-bar-container');
                 tablaBody.innerHTML = '';
-                progressBar.querySelectorAll('.checkpoint-marker-container').forEach(el => el.remove());
-                listaDePuntos.forEach(punto => {
-                    if(longitudTotalMts > 0){
-                        const percent = (punto.progresiva / longitudTotalMts) * 100;
+                
+                // Solo remover los markers si no es la primera carga para evitar parpadeo
+                if (!primeraCargaDetalle[idLimpieza]) {
+                    progressBar.querySelectorAll('.checkpoint-marker-container').forEach(el => el.remove());
+                }
+
+                data.listaDePuntos.forEach(punto => {
+                    if(!primeraCargaDetalle[idLimpieza] && data.longitudTotalMts > 0){
+                        const percent = (punto.progresiva / data.longitudTotalMts) * 100;
                         const marker = document.createElement('div');
                         marker.className = 'checkpoint-marker-container';
                         marker.style.left = percent + '%';
@@ -337,17 +443,21 @@
                     if (data.ultimoPunto && data.ultimoPunto.nombre === punto.nombre) row.classList.add('highlight');
                     tablaBody.appendChild(row);
                 });
+
                  if(!primeraCargaDetalle[idLimpieza]){
                     const wrapper = document.querySelector('.progress-bar-wrapper');
-                    wrapper.scrollTo({ left: (wrapper.scrollWidth * (avance.porcentaje / 100)) - (wrapper.clientWidth / 2) , behavior: 'auto' });
+                    wrapper.scrollTo({ left: (wrapper.scrollWidth * (data.avance.porcentaje / 100)) - (wrapper.clientWidth / 2) , behavior: 'auto' });
                     primeraCargaDetalle[idLimpieza] = true;
                 }
             } catch (error) {
-                detalleCorridaContainer.innerHTML = `<div class="message-box"><p style="color:red;">Error al cargar el detalle: ${error.message}</p></div>`;
+                console.error("Error actualizando detalle:", error);
+                // Opcional: mostrar un pequeño error no intrusivo
+                document.getElementById('update-time').textContent = `Error: ${error.message}`;
+                clearInterval(detalleInterval); // Detener actualizaciones si hay un error
             }
         }
        
-        // --- HISTORIAL ---
+        // --- Lógica de "Historial" (sin cambios) ---
         async function cargarDuctos() {
             const ductoSelect = document.getElementById('ducto-select');
             const mensajeDiv = document.getElementById('mensaje');
@@ -359,7 +469,6 @@
                 if(mensajeDiv) mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar ductos.</p>`;
             }
         }
-
         async function cargarCorridas() {
             const corridaSelect = document.getElementById('corrida-select');
             const ductoId = document.getElementById('ducto-select').value;
@@ -369,47 +478,36 @@
             corridaSelect.disabled = true;
             corridaSelect.innerHTML = '<option value="">Cargando...</option>';
             if (mensajeDiv) mensajeDiv.classList.remove('hidden');
-            
-            // Limpiar gráficos al cambiar de ducto
             drawHistoricoChart(null);
             drawSuciedadChart(null);
-
             if (!ductoId) {
                 corridaSelect.innerHTML = '<option value="">Seleccione un ducto</option>';
                 return;
             }
             try {
-                // Pedimos ambas cosas en paralelo para más eficiencia
                 const [corridas, suciedadData] = await Promise.all([
                     fetchSeguro('getCorridas', ductoId),
                     fetchSeguro('getSuciedadHistorico', ductoId)
                 ]);
-
                 if (corridas.length === 0) {
                     corridaSelect.innerHTML = '<option value="">No hay corridas</option>';
                     return;
                 }
-                
                 corridaSelect.innerHTML = '<option value="">Seleccione una corrida</option>';
                 corridas.forEach(c => { corridaSelect.innerHTML += `<option value="${c.id}">Nº ${c.nro} (${c.fecha})</option>`; });
                 corridaSelect.disabled = false;
-                
-                // Dibujar el gráfico de suciedad para el ducto seleccionado
                 drawSuciedadChart(suciedadData);
-
             } catch (error) {
                 if (mensajeDiv) mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar datos del ducto: ${error.message}</p>`;
             }
         }
-
-
         async function cargarResultados() {
-            const corridaId = document.getElementById('corrida-select').value;
+             const corridaId = document.getElementById('corrida-select').value;
             const resultadosContainer = document.getElementById('resultados-container');
             const mensajeDiv = document.getElementById('mensaje');
             if (!corridaId) {
                 resultadosContainer.classList.add('hidden');
-                drawHistoricoChart(null); // Limpia el gráfico de velocidad si no hay corrida
+                drawHistoricoChart(null);
                 return;
             }
             if(mensajeDiv) {
@@ -420,20 +518,15 @@
                 const data = await fetchSeguro('getHistorico', corridaId);
                 const resumenDiv = document.getElementById('resumen-corrida');
                 const tablaBodyHistorial = document.querySelector('#tabla-historico tbody');
-                
                 let suciedadHtml = data.resumen.suciedadKg !== null ? 
                     `<p><strong>Residuos [kg]:</strong> ${data.resumen.suciedadKg.toFixed(2)}</p>` : 
                     `<p><strong>Residuos [kg]:</strong> N/D</p>`;
-
                 resumenDiv.innerHTML = `<p><strong>Ducto:</strong> ${data.resumen.nombreDucto}</p><p><strong>Nº Limpieza:</strong> ${data.resumen.nroLimpieza}</p><p><strong>Fecha:</strong> ${data.resumen.fecha}</p><p><strong>Duración Total:</strong> ${data.resumen.duracion}</p>${suciedadHtml}`;
-                
                 tablaBodyHistorial.innerHTML = '';
                 data.tabla.forEach(cp => {
                     tablaBodyHistorial.innerHTML += `<tr><td>${cp.nombre}</td><td>${cp.progresiva.toLocaleString('es-AR')}</td><td>${cp.horario}</td></tr>`;
                 });
-                
                 drawHistoricoChart(data.checkpoints);
-                
                 if(mensajeDiv) mensajeDiv.classList.add('hidden');
                 resultadosContainer.classList.remove('hidden');
             } catch (error) {
@@ -441,8 +534,6 @@
                 resultadosContainer.classList.add('hidden');
             }
         }
-       
-        let historicoChart;
         function drawHistoricoChart(checkpoints) {
             const chartCanvasHistorial = document.getElementById('velocityChartHistorico');
             if (historicoChart) { historicoChart.destroy(); }
@@ -469,8 +560,6 @@
                 options: { scales: { y: { beginAtZero: true, title: { display: true, text: 'Velocidad (km/h)'} } }, plugins: { legend: { display: false } } }
             });
         }
-       
-        let suciedadChart;
         function drawSuciedadChart(suciedadData) {
             const chartCanvasSuciedad = document.getElementById('suciedadChart');
             if (suciedadChart) { suciedadChart.destroy(); }
@@ -478,10 +567,8 @@
                 if (chartCanvasSuciedad) chartCanvasSuciedad.getContext('2d').clearRect(0, 0, chartCanvasSuciedad.width, chartCanvasSuciedad.height);
                 return;
             };
-            
             const labels = suciedadData.map(d => `Nº ${d.nro} (${d.fecha})`);
             const data = suciedadData.map(d => d.suciedadKg);
-
             suciedadChart = new Chart(chartCanvasSuciedad, {
                 type: 'bar',
                 data: {
@@ -495,26 +582,118 @@
                     }]
                 },
                 options: {
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Residuos (kg)'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    }
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Residuos (kg)' } } },
+                    plugins: { legend: { display: false } }
                 }
             });
         }
 
-        document.getElementById('ducto-select').addEventListener('change', cargarCorridas);
-        document.getElementById('corrida-select').addEventListener('change', cargarResultados);
+        // --- Lógica de "Programación" (sin cambios) ---
+        async function cargarProgramacion() {
+            const container = document.getElementById('resumen-ductos-container');
+            const calendarContainer = document.getElementById('calendar-grid');
+            try {
+                container.innerHTML = `<div class="message-box"><p>Calculando programación...</p></div>`;
+                calendarioData = await fetchSeguro('getProgramacionData');
+                renderResumenDuctos(calendarioData);
+                renderCalendario(currentCalendarDate);
+                programacionCargada = true;
+            } catch (error) {
+                container.innerHTML = `<div class="message-box"><p style="color:red;">Error al cargar la programación: ${error.message}</p></div>`;
+            }
+        }
+        function renderResumenDuctos(ductos) {
+            const container = document.getElementById('resumen-ductos-container');
+            container.innerHTML = '';
+            if (!ductos || ductos.length === 0) {
+                container.innerHTML = `<div class="message-box"><p>No hay ductos para mostrar.</p></div>`;
+                return;
+            }
+            ductos.sort((a, b) => {
+                if (!a.proximaLimpieza) return 1;
+                if (!b.proximaLimpieza) return -1;
+                return new Date(a.proximaLimpieza) - new Date(b.proximaLimpieza);
+            });
+            ductos.forEach(d => {
+                const card = document.createElement('div');
+                card.className = 'ducto-card';
+                const hoy = new Date();
+                hoy.setHours(0,0,0,0);
+                const proxFecha = d.proximaLimpieza ? new Date(d.proximaLimpieza) : null;
+                let statusClass = '';
+                let statusText = 'OK';
+                if (proxFecha) {
+                    if (proxFecha < hoy) {
+                        statusClass = 'status-overdue';
+                        statusText = 'ATRASADA';
+                    } else if (proxFecha.getTime() === hoy.getTime()) {
+                        statusClass = 'status-due';
+                        statusText = 'VENCE HOY';
+                    }
+                }
+                card.style.borderLeftColor = statusClass === 'status-overdue' ? '#d32f2f' : (statusClass === 'status-due' ? '#f57c00' : '#1e88e5');
+                const tiempoPromedioStr = d.tiempoPromedioMin > 0 ? `${Math.floor(d.tiempoPromedioMin / 60)}h ${d.tiempoPromedioMin % 60}m` : 'N/D';
+                const ultimaLimpiezaStr = d.ultimaLimpieza ? new Date(d.ultimaLimpieza).toLocaleDateString('es-AR') : 'N/A';
+                const proximaLimpiezaStr = proxFecha ? `${proxFecha.toLocaleDateString('es-AR')} <span class="${statusClass}">(${statusText})</span>` : 'No programada';
+                card.innerHTML = `
+                    <h3>${d.nombre}</h3>
+                    <div class="ducto-card-grid">
+                        <p><strong>Próxima Limpieza:</strong> ${proximaLimpiezaStr}</p>
+                        <p><strong>Última Limpieza:</strong> ${ultimaLimpiezaStr}</p>
+                        <p><strong>Frecuencia:</strong> ${d.frecuencia}</p>
+                        <p><strong>Tiempo Promedio:</strong> ${tiempoPromedioStr}</p>
+                        <p><strong>Corridas Completas:</strong> ${d.corridasTotales}</p>
+                        <p><strong>Corridas Canceladas:</strong> ${d.corridasCanceladas}</p>
+                        <p><strong>Longitud:</strong> ${d.longitud.toLocaleString('es-AR')} mts</p>
+                        <p><strong>Diámetro:</strong> ${d.diametro}"</p>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+        function renderCalendario(date) {
+            const container = document.getElementById('calendar-grid');
+            const title = document.getElementById('calendar-title');
+            container.innerHTML = '';
+            const month = date.getMonth();
+            const year = date.getFullYear();
+            title.textContent = `${date.toLocaleString('es-AR', { month: 'long', year: 'numeric' }).toUpperCase()}`;
+            const firstDayOfMonth = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const diasSemana = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+            diasSemana.forEach(dia => {
+                const headerCell = document.createElement('div');
+                headerCell.className = 'calendar-header';
+                headerCell.textContent = dia;
+                container.appendChild(headerCell);
+            });
+            for (let i = 0; i < firstDayOfMonth; i++) {
+                container.innerHTML += `<div class="calendar-day other-month"></div>`;
+            }
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayCell = document.createElement('div');
+                dayCell.className = 'calendar-day';
+                dayCell.innerHTML = `<div class="day-number">${day}</div>`;
+                const currentDate = new Date(year, month, day);
+                const eventos = calendarioData.filter(d => {
+                    if (!d.proximaLimpieza) return false;
+                    const eventDate = new Date(d.proximaLimpieza);
+                    return eventDate.getFullYear() === year && eventDate.getMonth() === month && eventDate.getDate() === day;
+                });
+                eventos.forEach(evento => {
+                    const eventDiv = document.createElement('div');
+                    eventDiv.className = 'calendar-event';
+                    eventDiv.textContent = evento.nombre;
+                    dayCell.appendChild(eventDiv);
+                });
+                container.appendChild(dayCell);
+            }
+        }
+        function changeMonth(offset) {
+            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + offset);
+            renderCalendario(currentCalendarDate);
+        }
+
     </script>
 </body>
 </html>
