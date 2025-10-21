@@ -322,6 +322,9 @@
     <script>
         // --- Variables Globales ---
         const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzhSBRqZgnhT2qSRicW1y1j0y-GASJOggKlSgQJJ4SUUcYVEtXHqSWVPzopWn80JMVy_g/exec";
+        function crearRespuestaJSON(t, e = 200) {
+    return ContentService.createTextOutput(JSON.stringify(t)).setMimeType(ContentService.MimeType.JSON);
+}
         let timerInterval;
         let detalleInterval;
         let activeTimers = { proximo: 0, final: 0 };
@@ -414,4 +417,3 @@
     </script>
 </body>
 </html>
-
