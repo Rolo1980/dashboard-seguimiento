@@ -80,9 +80,8 @@
         .calendar-day .day-number { font-weight: bold; font-size: 1.2em; }
         .calendar-event { background-color: #1e88e5; color: white; padding: 3px 5px; border-radius: 3px; font-size: 0.85em; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
-        /* --- ESTILOS PARA EL NUEVO BOTÓN DE CERRAR SESIÓN --- */
         #logout-btn {
-            margin-left: auto; /* Empuja el botón a la derecha */
+            margin-left: auto; 
             background-color: #dc3545;
             color: white;
             border: none;
@@ -94,6 +93,120 @@
         }
         #logout-btn:hover {
             background-color: #c82333;
+        }
+
+        #chat-widget {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        #chat-bubble {
+            width: 60px;
+            height: 60px;
+            background-color: #0d47a1;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 28px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        #chat-bubble:hover {
+            transform: scale(1.1);
+        }
+
+        #chat-container {
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            width: 370px;
+            max-width: 90vw;
+            height: 500px;
+            background: #fff;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        #chat-container.hidden {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+        }
+
+        .chat-header {
+            background: #1a237e;
+            color: white;
+            padding: 15px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .chat-message {
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+            line-height: 1.4;
+        }
+
+        .chat-message.user {
+            background-color: #e3f2fd;
+            color: #0d47a1;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-message.bot {
+            background-color: #f1f3f4;
+            color: #3c4043;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-message.bot.thinking {
+            font-style: italic;
+            color: #888;
+        }
+
+        .chat-input {
+            display: flex;
+            border-top: 1px solid #eee;
+            padding: 10px;
+        }
+
+        .chat-input input {
+            flex-grow: 1;
+            border: none;
+            padding: 10px;
+            font-size: 1em;
+            outline: none;
+        }
+
+        .chat-input button {
+            background: #0d47a1;
+            border: none;
+            color: white;
+            padding: 0 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -191,509 +304,113 @@
             </div>
         </div>
     </div>
-   
+
+    <div id="chat-widget">
+        <div id="chat-container" class="hidden">
+            <div class="chat-header">Asistente de Corridas</div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-message bot">Hola, ¿cómo puedo ayudarte con la información de las corridas de limpieza?</div>
+            </div>
+            <form class="chat-input" id="chat-form">
+                <input type="text" id="chat-input-text" placeholder="Escribe tu pregunta..." autocomplete="off">
+                <button type="submit">Enviar</button>
+            </form>
+        </div>
+        <div id="chat-bubble">💬</div>
+    </div>
+    
     <script>
         // --- Variables Globales ---
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby2XU-wz9PzzAMsastd-6Gwj05VNpVS8oQnwv_8UG3GxYZq5-NHYS1qLy6OF6hidExvpA/exec";
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzhSBRqZgnhT2qSRicW1y1j0y-GASJOggKlSgQJJ4SUUcYVEtXHqSWVPzopWn80JMVy_g/exec";
         let timerInterval;
-        let detalleInterval; // <-- NUEVA VARIABLE para el intervalo del detalle
+        let detalleInterval;
         let activeTimers = { proximo: 0, final: 0 };
         let primeraCargaDetalle = {};
         let historicoChart, suciedadChart;
         let programacionCargada = false;
         let calendarioData = [];
         let currentCalendarDate = new Date();
+        let conversationHistory = [];
 
-        // --- Inicialización ---
-        document.addEventListener('DOMContentLoaded', () => {
-            if (sessionStorage.getItem('authToken')) {
-                mostrarAplicacion();
-            } else {
-                document.getElementById('login-wrapper').classList.remove('hidden');
-            }
-        });
-
-        // --- Lógica de Login y Logout ---
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const loginError = document.getElementById('login-error');
-            loginError.textContent = 'Verificando...';
-            try {
-                const url = `${SCRIPT_URL}?action=login&user=${encodeURIComponent(username.value)}&pass=${encodeURIComponent(password.value)}`;
-                const response = await fetch(url);
-                const result = await response.json();
-                if (result.status === 'success' && result.token) {
-                    sessionStorage.setItem('authToken', result.token);
-                    mostrarAplicacion();
-                } else {
-                    loginError.textContent = result.message || 'Error al iniciar sesión.';
-                }
-            } catch (error) {
-                loginError.textContent = 'Error de conexión.';
-            }
-        });
-
-        function mostrarAplicacion() {
-            document.getElementById('login-wrapper').classList.add('hidden');
-            document.getElementById('app-container').classList.remove('hidden');
-            iniciarDashboard();
-        }
-
-        function iniciarDashboard() {
-            // Se actualiza la lista cada 60 segundos
-            setInterval(cargarCorridasActivas, 60000);
-            cargarCorridasActivas();
-            
-            iniciarTimers();
-            cargarDuctos();
-            document.getElementById('ducto-select').addEventListener('change', cargarCorridas);
-            document.getElementById('corrida-select').addEventListener('change', cargarResultados);
-            document.getElementById('prev-month').addEventListener('click', () => changeMonth(-1));
-            document.getElementById('next-month').addEventListener('click', () => changeMonth(1));
-
-            // Lógica del botón de logout
-            document.getElementById('logout-btn').addEventListener('click', () => {
-                sessionStorage.removeItem('authToken');
-                location.reload();
-            });
-        }
-
-        // --- Navegación por Tabs ---
-        function openTab(evt, tabName) {
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-            document.getElementById(tabName).classList.add('active');
-            evt.currentTarget.classList.add('active');
-            if (tabName === 'programacion' && !programacionCargada) {
-                cargarProgramacion();
-            }
-        }
-       
-        async function fetchSeguro(action, id = null) {
-            const token = sessionStorage.getItem('authToken');
-            if (!token) { location.reload(); return Promise.reject("No token"); }
-            let url = `${SCRIPT_URL}?action=${action}&token=${token}`;
-            if (id) { url += `&id=${id}`; }
-            const response = await fetch(url);
-            if (!response.ok) {
-                   if (response.status === 401) { sessionStorage.removeItem('authToken'); location.reload(); }
-                   const errorData = await response.json();
-                   throw new Error(errorData.error || `Error: ${response.status}`);
-            }
-            return response.json();
-        }
-
-        // --- Lógica de Timers ---
-        function iniciarTimers() {
-             if (timerInterval) clearInterval(timerInterval);
-             timerInterval = setInterval(() => {
-                 actualizarDisplayTimer('timer-proximo-detalle', activeTimers.proximo);
-                 actualizarDisplayTimer('timer-final-detalle', activeTimers.final);
-             }, 1000);
-        }
-
-        function actualizarDisplayTimer(elementId, targetTimestamp) {
-            const span = document.getElementById(elementId);
-            if (!span) return;
-            if (!targetTimestamp || targetTimestamp <= 0) {
-                span.textContent = "--:--:--"; return;
-            }
-            const diferencia = targetTimestamp - new Date().getTime();
-            if (diferencia <= 0) {
-                span.textContent = "00:00:00"; return;
-            }
-            const horas = Math.floor(diferencia / 36e5);
-            const minutos = Math.floor((diferencia % 36e5) / 6e4);
-            const segundos = Math.floor((diferencia % 6e4) / 1000);
-            span.textContent = `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
-        }
-       
-        // --- Lógica de "Seguimiento en Vivo" (MODIFICADA) ---
-        async function cargarCorridasActivas() {
-            const detalleCorridaContainer = document.getElementById('detalle-corrida-container');
-            if (!detalleCorridaContainer.classList.contains('hidden')) return;
-            const listaCorridasContainer = document.getElementById('lista-corridas-container');
-            try {
-                const data = await fetchSeguro('getVivo');
-                if (data.error) throw new Error(data.error);
-                if (data.ultimaCorrida) {
-                    listaCorridasContainer.innerHTML = `<div class="message-box"><p>No hay limpiezas activas.<br><br><strong>Última corrida finalizada:</strong><br>Nº: ${data.ultimaCorrida.numeroLimpieza} | Ducto: ${data.ultimaCorrida.nombreDucto}<br>Finalizó el ${data.ultimaCorrida.fecha} a las ${data.ultimaCorrida.hora} hs.<br>Duración Total: ${data.ultimaCorrida.duracion}</p></div>`;
-                    return;
-                }
-                if (Array.isArray(data) && data.length > 0) {
-                    listaCorridasContainer.innerHTML = `<h3>Seleccione una corrida para ver el detalle:</h3>`;
-                    const listaDiv = document.createElement('div');
-                    listaDiv.className = 'lista-corridas-activas';
-                    data.forEach(corrida => {
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'corrida-item';
-                        itemDiv.dataset.id = corrida.id;
-                        itemDiv.innerHTML = `<h3>Nº ${corrida.nro}</h3><p>${corrida.nombreDucto}</p>`;
-                        itemDiv.addEventListener('click', () => mostrarDetalleVivo(corrida.id));
-                        listaDiv.appendChild(itemDiv);
-                    });
-                    listaCorridasContainer.appendChild(listaDiv);
-                } else {
-                    listaCorridasContainer.innerHTML = `<div class="message-box"><p>No se encontraron corridas activas.</p></div>`;
-                }
-            } catch(error) {
-                listaCorridasContainer.innerHTML = `<div class="message-box"><p style="color:red;">Error al cargar corridas: ${error.message}</p></div>`;
-            }
-        }
+        // --- Lógica de Inicialización y Login ---
+        document.addEventListener('DOMContentLoaded', () => { if (sessionStorage.getItem('authToken')) { mostrarAplicacion(); } else { document.getElementById('login-wrapper').classList.remove('hidden'); } });
+        document.getElementById('login-form').addEventListener('submit', async (e) => { e.preventDefault(); const l=document.getElementById('login-error'); l.textContent='Verificando...'; try { const r = await fetch(`${SCRIPT_URL}?action=login&user=${encodeURIComponent(username.value)}&pass=${encodeURIComponent(password.value)}`), s = await r.json(); if (s.status==='success'&&s.token){sessionStorage.setItem('authToken',s.token); mostrarAplicacion();} else {l.textContent=s.message||'Error al iniciar sesión.';}} catch (e){l.textContent='Error de conexión.';}});
+        function mostrarAplicacion() { document.getElementById('login-wrapper').classList.add('hidden'); document.getElementById('app-container').classList.remove('hidden'); iniciarDashboard(); }
+        function iniciarDashboard() { setInterval(cargarCorridasActivas, 60000); cargarCorridasActivas(); iniciarTimers(); cargarDuctos(); document.getElementById('ducto-select').addEventListener('change', cargarCorridas); document.getElementById('corrida-select').addEventListener('change', cargarResultados); document.getElementById('prev-month').addEventListener('click', () => changeMonth(-1)); document.getElementById('next-month').addEventListener('click', () => changeMonth(1)); document.getElementById('logout-btn').addEventListener('click', () => { sessionStorage.removeItem('authToken'); location.reload(); });}
+        function openTab(e,t){document.querySelectorAll(".tab-content").forEach(e=>e.classList.remove("active"));document.querySelectorAll(".tab-button").forEach(e=>e.classList.remove("active"));document.getElementById(t).classList.add("active");e.currentTarget.classList.add("active");if(t==='programacion'&&!programacionCargada){cargarProgramacion();}}
+        async function fetchSeguro(e,t=null){const n=sessionStorage.getItem("authToken");if(!n){location.reload();return Promise.reject("No token")}let a=`${SCRIPT_URL}?action=${e}&token=${n}`;if(t){a+=`&id=${t}`}const o=await fetch(a);if(!o.ok){if(o.status===401){sessionStorage.removeItem("authToken");location.reload()}const r=await o.json();throw new Error(r.error||`Error: ${o.status}`)}return o.json()}
+        function iniciarTimers() { if (timerInterval) clearInterval(timerInterval); timerInterval = setInterval(()=>{actualizarDisplayTimer('timer-proximo-detalle', activeTimers.proximo); actualizarDisplayTimer('timer-final-detalle', activeTimers.final);}, 1000); }
+        function actualizarDisplayTimer(e,t){const n=document.getElementById(e);if(n){if(!t||t<=0){n.textContent="--:--:--";return}const a=t-Date.now();if(a<=0){n.textContent="00:00:00";return}const o=String(Math.floor(a/36e5)).padStart(2,"0"),r=String(Math.floor(a%36e5/6e4)).padStart(2,"0"),s=String(Math.floor(a%6e4/1e3)).padStart(2,"0");n.textContent=`${o}:${r}:${s}`}}
         
-        async function mostrarDetalleVivo(idLimpieza) {
-            if (detalleInterval) clearInterval(detalleInterval); // Limpia cualquier intervalo anterior
-
-            const listaCorridasContainer = document.getElementById('lista-corridas-container');
-            const detalleCorridaContainer = document.getElementById('detalle-corrida-container');
-            listaCorridasContainer.classList.add('hidden');
-            detalleCorridaContainer.classList.remove('hidden');
-            
-            // Crea la estructura HTML una sola vez
-            detalleCorridaContainer.innerHTML = `
-                <button id="btn-volver-lista" class="btn-volver">&larr; Volver a la lista</button>
-                <div id="activa-container">
-                    <div class="progress-display">
-                        <h3 id="detalle-ducto-nombre" style="text-align:center; margin-top:0;">Cargando...</h3>
-                        <div class="progress-bar-wrapper">
-                            <div class="progress-bar" id="progress-bar-container">
-                                <div id="progress-fill" class="progress"></div>
-                                <div id="pig-container"><div class="pig-indicator"></div><div class="pig-tooltip" id="pig-tooltip-text"></div></div>
-                            </div>
-                        </div>
-                        <p class="footer">Última actualización: <span id="update-time">--:--:--</span></p>
-                    </div>
-                    <div class="info">
-                        <p><strong>Nº Limpieza:</strong> <span id="detalle-nro-limpieza"></span></p>
-                        <p><strong>Estado:</strong> <span id="detalle-estado"></span></p>
-                        <p><strong>Velocidad (est.):</strong> <span id="velocidad-detalle"></span></p>
-                        <p><strong>Progresiva (est.):</strong> <span id="progresiva-detalle"></span> mts</p>
-                        <p><strong>Método Cálculo:</strong> <span id="detalle-metodo"></span></p>
-                        <p><strong>ETA Receptora:</strong> <span id="detalle-eta-final"></span></p>
-                        <p class="timer-display">Próximo CP (<span id="nombre-proximo-cp-detalle">...</span>) en: <span id="timer-proximo-detalle">--:--:--</span></p>
-                        <p class="timer-display">Llegada a Receptora en: <span id="timer-final-detalle">--:--:--</span></p>
-                    </div>
-                    <div class="table-container">
-                        <table>
-                            <thead><tr><th>Checkpoint</th><th>Progresiva [mts]</th><th>Horario Pasada</th></tr></thead>
-                            <tbody id="puntos-tabla-body-detalle"></tbody>
-                        </table>
-                    </div>
-                </div>`;
-
-            document.getElementById('btn-volver-lista').addEventListener('click', () => {
-                clearInterval(detalleInterval); // DETIENE la actualización automática
-                detalleCorridaContainer.classList.add('hidden');
-                listaCorridasContainer.classList.remove('hidden');
-                cargarCorridasActivas();
-            });
-
-            // Llama a la función de actualización inmediatamente, y luego cada 30 segundos
-            actualizarDetalleVivo(idLimpieza);
-            detalleInterval = setInterval(() => actualizarDetalleVivo(idLimpieza), 30000); 
-        }
-
-        async function actualizarDetalleVivo(idLimpieza) {
-            try {
-                const data = await fetchSeguro('getDetalleVivo', idLimpieza);
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-
-                // Actualizar todos los campos con los nuevos datos
-                document.getElementById('detalle-ducto-nombre').textContent = data.nombreDucto;
-                document.getElementById('detalle-nro-limpieza').textContent = data.numeroLimpieza;
-                document.getElementById('detalle-estado').textContent = data.estado;
-                document.getElementById('velocidad-detalle').textContent = data.estimacion.velocidad_ms ? `${(data.estimacion.velocidad_ms * 3.6).toFixed(2)} km/h (${data.estimacion.velocidad_ms.toFixed(2)} m/s)` : '---';
-                document.getElementById('progresiva-detalle').textContent = Math.round(data.estimacion.progresivaEstimadaMts).toLocaleString('es-AR');
-                document.getElementById('detalle-metodo').textContent = data.estimacion.metodoCalculo;
-                document.getElementById('detalle-eta-final').textContent = data.estimacion.etaFinal ? data.estimacion.etaFinal.hora : '---';
-                document.getElementById('update-time').textContent = new Date().toLocaleTimeString('es-AR');
-                
-                document.getElementById('progress-fill').style.width = data.avance.porcentaje + '%';
-                document.getElementById('progress-fill').textContent = data.avance.porcentaje.toFixed(1) + '%';
-                document.getElementById('pig-container').style.left = `calc(${data.avance.porcentaje}% - 10.5px)`;
-                document.getElementById('pig-tooltip-text').textContent = `${Math.round(data.estimacion.progresivaEstimadaMts).toLocaleString('es-AR')} mts`;
-                
-                activeTimers.proximo = data.estimacion.etaProximo ? data.estimacion.etaProximo.timestamp : 0;
-                activeTimers.final = data.estimacion.etaFinal ? data.estimacion.etaFinal.timestamp : 0;
-                document.getElementById('nombre-proximo-cp-detalle').textContent = data.estimacion.etaProximo ? data.estimacion.etaProximo.nombre : '...';
-                
-                const tablaBody = document.getElementById('puntos-tabla-body-detalle');
-                const progressBar = document.getElementById('progress-bar-container');
-                tablaBody.innerHTML = '';
-                
-                // Solo remover los markers si no es la primera carga para evitar parpadeo
-                if (!primeraCargaDetalle[idLimpieza]) {
-                    progressBar.querySelectorAll('.checkpoint-marker-container').forEach(el => el.remove());
-                }
-
-                data.listaDePuntos.forEach(punto => {
-                    if(!primeraCargaDetalle[idLimpieza] && data.longitudTotalMts > 0){
-                        const percent = (punto.progresiva / data.longitudTotalMts) * 100;
-                        const marker = document.createElement('div');
-                        marker.className = 'checkpoint-marker-container';
-                        marker.style.left = percent + '%';
-                        marker.innerHTML = `<div class="checkpoint-marker"></div><div class="tooltip">${punto.nombre} | ${(punto.progresiva / 1000).toFixed(2)} km</div>`;
-                        progressBar.appendChild(marker);
+        // --- Funciones del Dashboard ---
+        async function cargarCorridasActivas() { const d=document.getElementById('detalle-corrida-container');if(!d.classList.contains('hidden'))return;const c=document.getElementById('lista-corridas-container');try{const a=await fetchSeguro('getVivo');if(a.error)throw new Error(a.error);if(a.ultimaCorrida){c.innerHTML=`<div class="message-box"><p>No hay limpiezas activas.<br><br><strong>Última corrida finalizada:</strong><br>Nº: ${a.ultimaCorrida.numeroLimpieza} | Ducto: ${a.ultimaCorrida.nombreDucto}<br>Finalizó el ${a.ultimaCorrida.fecha} a las ${a.ultimaCorrida.hora} hs.<br>Duración Total: ${a.ultimaCorrida.duracion}</p></div>`;return}if(Array.isArray(a)&&a.length>0){c.innerHTML=`<h3>Seleccione una corrida para ver el detalle:</h3>`;const e=document.createElement('div');e.className='lista-corridas-activas';a.forEach(t=>{const n=document.createElement('div');n.className='corrida-item';n.dataset.id=t.id;n.innerHTML=`<h3>Nº ${t.nro}</h3><p>${t.nombreDucto}</p>`;n.addEventListener('click',()=>mostrarDetalleVivo(t.id));e.appendChild(n)});c.appendChild(e)}else{c.innerHTML=`<div class="message-box"><p>No se encontraron corridas activas.</p></div>`}}catch(t){c.innerHTML=`<div class="message-box"><p style="color:red;">Error al cargar corridas: ${t.message}</p></div>`}}
+        async function mostrarDetalleVivo(e){if(detalleInterval)clearInterval(detalleInterval);document.getElementById('lista-corridas-container').classList.add('hidden');const t=document.getElementById('detalle-corrida-container');t.classList.remove('hidden');t.innerHTML=`
+                <button id="btn-volver-lista" class="btn-volver">&larr; Volver a la lista</button><div class="progress-display"><h3 id="detalle-ducto-nombre" style="text-align:center; margin-top:0;">Cargando...</h3><div class="progress-bar-wrapper"><div class="progress-bar" id="progress-bar-container"><div id="progress-fill" class="progress"></div><div id="pig-container"><div class="pig-indicator"></div><div class="pig-tooltip" id="pig-tooltip-text"></div></div></div></div><p class="footer">Última actualización: <span id="update-time">--:--:--</span></p></div><div class="info"><p><strong>Nº Limpieza:</strong> <span id="detalle-nro-limpieza"></span></p> <p><strong>Estado:</strong> <span id="detalle-estado"></span></p><p><strong>Velocidad (est.):</strong> <span id="velocidad-detalle"></span></p> <p><strong>Progresiva (est.):</strong> <span id="progresiva-detalle"></span> mts</p><p><strong>Método Cálculo:</strong> <span id="detalle-metodo"></span></p> <p><strong>ETA Receptora:</strong> <span id="detalle-eta-final"></span></p><p class="timer-display">Próximo CP (<span id="nombre-proximo-cp-detalle">...</span>) en: <span id="timer-proximo-detalle">--:--:--</span></p><p class="timer-display">Llegada a Receptora en: <span id="timer-final-detalle">--:--:--</span></p></div><table><thead><tr><th>Checkpoint</th><th>Progresiva [mts]</th><th>Horario Pasada</th></tr></thead><tbody id="puntos-tabla-body-detalle"></tbody></table>`;document.getElementById('btn-volver-lista').addEventListener('click',()=>{clearInterval(detalleInterval);t.classList.add('hidden');document.getElementById('lista-corridas-container').classList.remove('hidden');cargarCorridasActivas()});actualizarDetalleVivo(e);detalleInterval=setInterval(()=>actualizarDetalleVivo(e),30000)}
+        async function actualizarDetalleVivo(e){try{const t=await fetchSeguro('getDetalleVivo',e);if(!t||t.error){throw new Error(t?t.error:"No se recibieron datos.")}
+        document.getElementById('detalle-ducto-nombre').textContent=t.nombreDucto;document.getElementById('detalle-nro-limpieza').textContent=t.numeroLimpieza;document.getElementById('detalle-estado').textContent=t.estado;document.getElementById('velocidad-detalle').textContent=t.estimacion.velocidad_ms?`${(t.estimacion.velocidad_ms*3.6).toFixed(2)} km/h`:'---';document.getElementById('progresiva-detalle').textContent=Math.round(t.estimacion.progresivaEstimadaMts).toLocaleString('es-AR');document.getElementById('detalle-metodo').textContent=t.estimacion.metodoCalculo;document.getElementById('detalle-eta-final').textContent=t.estimacion.etaFinal?t.estimacion.etaFinal.hora:'---';document.getElementById('update-time').textContent=(new Date).toLocaleTimeString('es-AR');const n=document.getElementById('progress-fill');n.style.width=t.avance.porcentaje+'%';n.textContent=t.avance.porcentaje.toFixed(1)+'%';document.getElementById('pig-container').style.left=`calc(${t.avance.porcentaje}% - 10.5px)`;document.getElementById('pig-tooltip-text').textContent=`${Math.round(t.estimacion.progresivaEstimadaMts).toLocaleString('es-AR')} mts`;activeTimers.proximo=t.estimacion.etaProximo?t.estimacion.etaProximo.timestamp:0;activeTimers.final=t.estimacion.etaFinal?t.estimacion.etaFinal.timestamp:0;document.getElementById('nombre-proximo-cp-detalle').textContent=t.estimacion.etaProximo?t.estimacion.etaProximo.nombre:'...';const a=document.getElementById('puntos-tabla-body-detalle');a.innerHTML='';const o=document.getElementById('progress-bar-container');if(primeraCargaDetalle[e]){o.querySelectorAll('.checkpoint-marker-container').forEach(e=>e.remove())}
+        t.listaDePuntos.forEach(n=>{if(!primeraCargaDetalle[e]&&t.longitudTotalMts>0){const a=n.progresiva/t.longitudTotalMts*100,r=document.createElement('div');r.className='checkpoint-marker-container';r.style.left=a+'%';r.innerHTML=`<div class="checkpoint-marker"></div><div class="tooltip">${n.nombre}</div>`;o.appendChild(r)}const s=document.createElement('tr'),i=n.horaPasada?n.horaPasada.includes('(')?`<span class="horario-estimado">${n.horaPasada}</span>`:n.horaPasada:'---';s.innerHTML=`<td>${n.nombre}</td><td>${n.progresiva.toLocaleString('es-AR')}</td><td>${i}</td>`;if(t.ultimoPunto&&t.ultimoPunto.nombre===n.nombre)s.classList.add('highlight');a.appendChild(s)});if(!primeraCargaDetalle[e]){const c=document.querySelector('.progress-bar-wrapper');c.scrollTo({left:c.scrollWidth*(t.avance.porcentaje/100)-c.clientWidth/2,behavior:'auto'});primeraCargaDetalle[e]=true}}catch(r){document.getElementById('update-time').textContent=`Error: ${r.message}`;clearInterval(detalleInterval)}}
+        async function cargarDuctos(){try{const e=await fetchSeguro('getDuctos'),t=document.getElementById('ducto-select');t.innerHTML='<option value="">Seleccione un ducto</option>';e.forEach(n=>{t.innerHTML+=`<option value="${n.id}">${n.nombre}</option>`})}catch(e){document.getElementById('mensaje').innerHTML=`<p style="color: red;">Error al cargar ductos: ${e.message}</p>`}}
+        async function cargarCorridas(){const e=document.getElementById('ducto-select').value,t=document.getElementById('corrida-select'),n=document.getElementById('mensaje');document.getElementById('resultados-container').classList.add('hidden');t.disabled=true;t.innerHTML='<option value="">Cargando...</option>';n.classList.remove('hidden');if(!e){t.innerHTML='<option value="">Seleccione un ducto</option>';return}try{const[a,o]=await Promise.all([fetchSeguro('getCorridas',e),fetchSeguro('getSuciedadHistorico',e)]);if(!Array.isArray(a))throw new Error(a.error||"Datos de corridas no válidos.");if(!Array.isArray(o))throw new Error(o.error||"Datos de suciedad no válidos.");if(a.length===0){t.innerHTML='<option value="">No hay corridas</option>'}else{t.innerHTML='<option value="">Seleccione una corrida</option>';a.forEach(e=>{t.innerHTML+=`<option value="${e.id}">Nº ${e.nro} (${e.fecha})</option>`});t.disabled=false}drawSuciedadChart(o)}catch(r){n.innerHTML=`<p style="color: red;">Error al cargar datos del ducto: ${r.message}</p>`}}
+        async function cargarResultados(){const e=document.getElementById('corrida-select').value,t=document.getElementById('resultados-container'),n=document.getElementById('mensaje');if(!e){t.classList.add('hidden');return}n.innerHTML='<p>Cargando datos...</p>';n.classList.remove('hidden');try{const a=await fetchSeguro('getHistorico',e);if(a.error)throw new Error(a.error);document.getElementById('resumen-corrida').innerHTML=`<p><strong>Ducto:</strong> ${a.resumen.nombreDucto}</p><p><strong>Nº Limpieza:</strong> ${a.resumen.nroLimpieza}</p><p><strong>Fecha:</strong> ${a.resumen.fecha}</p><p><strong>Duración Total:</strong> ${a.resumen.duracion}</p>`;const o=document.querySelector('#tabla-historico tbody');o.innerHTML='';a.tabla.forEach(e=>{o.innerHTML+=`<tr><td>${e.nombre}</td><td>${e.progresiva.toLocaleString('es-AR')}</td><td>${e.horario}</td></tr>`});drawHistoricoChart(a.checkpoints);n.classList.add('hidden');t.classList.remove('hidden')}catch(r){n.innerHTML=`<p style="color: red;">Error al cargar resultados: ${r.message}</p>`;t.classList.add('hidden')}}
+        function drawHistoricoChart(e){const t=document.getElementById('velocityChartHistorico');if(historicoChart){historicoChart.destroy()}if(!e||e.length<2){if(t){t.getContext('2d').clearRect(0,0,t.width,t.height)}return}const n=[],a=[];for(let o=1;o<e.length;o++){const r=e[o-1],s=e[o],i=s.progresiva_mts-r.progresiva_mts,l=(new Date(s.fechaHora).getTime()-(new Date(r.fechaHora).getTime()))/1e3;if(l>0&&i>0){n.push(`${r.nombre} -> ${s.nombre}`);a.push((i/l*3.6).toFixed(2))}}historicoChart=new Chart(t,{type:'bar',data:{labels:n,datasets:[{type:'bar',label:'Velocidad (km/h)',data:a,backgroundColor:'rgba(26, 35, 126, 0.6)'},{type:'line',label:'Tendencia',data:a,borderColor:'#e53935',fill:false}]},options:{scales:{y:{beginAtZero:true,title:{display:true,text:'Velocidad (km/h)'}}},plugins:{legend:{display:false}}}})}
+        function drawSuciedadChart(e){const t=document.getElementById('suciedadChart');if(suciedadChart){suciedadChart.destroy()}if(!e||e.length===0){if(t){t.getContext('2d').clearRect(0,0,t.width,t.height)}return}const n=e.map(t=>`Nº ${t.nro} (${t.fecha})`),a=e.map(e=>e.suciedadKg);suciedadChart=new Chart(t,{type:'bar',data:{labels:n,datasets:[{label:'Suciedad (kg)',data:a,backgroundColor:'rgba(139, 69, 19, 0.6)'}]},options:{scales:{y:{beginAtZero:true,title:{display:true,text:'Residuos (kg)'}}},plugins:{legend:{display:false}}}})}
+        async function cargarProgramacion(){const e=document.getElementById('resumen-ductos-container');try{e.innerHTML=`<div class="message-box"><p>Calculando programación...</p></div>`;calendarioData=await fetchSeguro('getProgramacionData');if(Array.isArray(calendarioData)){renderResumenDuctos(calendarioData);renderCalendario(currentCalendarDate);programacionCargada=true}else{throw new Error(calendarioData.error||"Datos de programación no válidos.")}}catch(t){e.innerHTML=`<div class="message-box"><p style="color:red;">Error al cargar la programación: ${t.message}</p></div>`}}
+        function renderResumenDuctos(e){const t=document.getElementById('resumen-ductos-container');t.innerHTML='';if(!Array.isArray(e)||e.length===0){t.innerHTML=`<div class="message-box"><p>No hay ductos para mostrar.</p></div>`;return}e.sort((e,t)=>{if(!e.proximaLimpieza)return 1;if(!t.proximaLimpieza)return-1;return new Date(e.proximaLimpieza)-new Date(t.proximaLimpieza)});e.forEach(n=>{const a=document.createElement('div');a.className='ducto-card';const o=new Date;o.setHours(0,0,0,0);const r=n.proximaLimpieza?new Date(n.proximaLimpieza):null;let s='',i='OK';if(r){if(r<o){s='status-overdue';i='ATRASADA'}else if(r.getTime()===o.getTime()){s='status-due';i='VENCE HOY'}}a.style.borderLeftColor=s==='status-overdue'?'#d32f2f':s==='status-due'?'#f57c00':'#1e88e5';const l=n.tiempoPromedioMin>0?`${Math.floor(n.tiempoPromedioMin/60)}h ${n.tiempoPromedioMin%60}m`:'N/D',c=n.ultimaLimpieza?(new Date(n.ultimaLimpieza)).toLocaleDateString('es-AR'):'N/A',d=r?`${r.toLocaleDateString('es-AR')} <span class="${s}">(${i})</span>`:'No programada';a.innerHTML=`
+                    <h3>${n.nombre}</h3><div class="ducto-card-grid"><p><strong>Próxima Limpieza:</strong> ${d}</p><p><strong>Última Limpieza:</strong> ${c}</p><p><strong>Frecuencia:</strong> ${n.frecuencia}</p><p><strong>Tiempo Promedio:</strong> ${l}</p><p><strong>Corridas Completas:</strong> ${n.corridasTotales}</p><p><strong>Corridas Canceladas:</strong> ${n.corridasCanceladas}</p><p><strong>Longitud:</strong> ${n.longitud.toLocaleString('es-AR')} mts</p><p><strong>Diámetro:</strong> ${n.diametro}"</p></div>`;t.appendChild(a)})}
+        function renderCalendario(e){const t=document.getElementById('calendar-grid'),n=document.getElementById('calendar-title');t.innerHTML='';const a=e.getMonth(),o=e.getFullYear();n.textContent=`${e.toLocaleString('es-AR',{month:'long',year:'numeric'}).toUpperCase()}`;const r=(new Date(o,a,1)).getDay(),s=(new Date(o,a+1,0)).getDate(),i=['D','L','M','M','J','V','S'];i.forEach(e=>{t.innerHTML+=`<div class="calendar-header">${e}</div>`});for(let l=0;l<r;l++){t.innerHTML+=`<div class="calendar-day other-month"></div>`}for(let c=1;c<=s;c++){const d=document.createElement('div');d.className='calendar-day';d.innerHTML=`<div class="day-number">${c}</div>`;if(Array.isArray(calendarioData)){const u=calendarioData.filter(t=>{if(!t.proximaLimpieza)return false;const n=(new Date(t.proximaLimpieza));return n.getFullYear()===o&&n.getMonth()===a&&n.getDate()===c});u.forEach(e=>{d.innerHTML+=`<div class="calendar-event">${e.nombre}</div>`})}t.appendChild(d)}}
+        function changeMonth(e){currentCalendarDate.setMonth(currentCalendarDate.getMonth()+e);renderCalendario(currentCalendarDate)}
+        
+        // --- Lógica del Chat con Memoria ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatBubble = document.getElementById('chat-bubble');
+            const chatContainer = document.getElementById('chat-container');
+            const chatForm = document.getElementById('chat-form');
+            const chatInput = document.getElementById('chat-input-text');
+            const chatMessages = document.getElementById('chat-messages');
+            if (chatBubble) {
+                chatBubble.addEventListener('click', () => {
+                    chatContainer.classList.toggle('hidden');
+                    if (!chatContainer.classList.contains('hidden')) {
+                        conversationHistory = [];
                     }
-                    const row = document.createElement('tr');
-                    let horarioHtml = punto.horaPasada ? (punto.horaPasada.includes('(') ? `<span class="horario-estimado">${punto.horaPasada}</span>` : punto.horaPasada) : '---';
-                    row.innerHTML = `<td>${punto.nombre}</td><td>${punto.progresiva.toLocaleString('es-AR')}</td><td>${horarioHtml}</td>`;
-                    if (data.ultimoPunto && data.ultimoPunto.nombre === punto.nombre) row.classList.add('highlight');
-                    tablaBody.appendChild(row);
                 });
-
-                 if(!primeraCargaDetalle[idLimpieza]){
-                    const wrapper = document.querySelector('.progress-bar-wrapper');
-                    wrapper.scrollTo({ left: (wrapper.scrollWidth * (data.avance.porcentaje / 100)) - (wrapper.clientWidth / 2) , behavior: 'auto' });
-                    primeraCargaDetalle[idLimpieza] = true;
-                }
-            } catch (error) {
-                console.error("Error actualizando detalle:", error);
-                // Opcional: mostrar un pequeño error no intrusivo
-                document.getElementById('update-time').textContent = `Error: ${error.message}`;
-                clearInterval(detalleInterval); // Detener actualizaciones si hay un error
             }
-        }
-       
-        // --- Lógica de "Historial" (sin cambios) ---
-        async function cargarDuctos() {
-            const ductoSelect = document.getElementById('ducto-select');
-            const mensajeDiv = document.getElementById('mensaje');
-            try {
-                const ductos = await fetchSeguro('getDuctos');
-                ductoSelect.innerHTML = '<option value="">Seleccione un ducto</option>';
-                ductos.forEach(d => { ductoSelect.innerHTML += `<option value="${d.id}">${d.nombre}</option>`; });
-            } catch (error) {
-                if(mensajeDiv) mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar ductos.</p>`;
-            }
-        }
-        async function cargarCorridas() {
-            const corridaSelect = document.getElementById('corrida-select');
-            const ductoId = document.getElementById('ducto-select').value;
-            const resultadosContainer = document.getElementById('resultados-container');
-            const mensajeDiv = document.getElementById('mensaje');
-            resultadosContainer.classList.add('hidden');
-            corridaSelect.disabled = true;
-            corridaSelect.innerHTML = '<option value="">Cargando...</option>';
-            if (mensajeDiv) mensajeDiv.classList.remove('hidden');
-            drawHistoricoChart(null);
-            drawSuciedadChart(null);
-            if (!ductoId) {
-                corridaSelect.innerHTML = '<option value="">Seleccione un ducto</option>';
-                return;
-            }
-            try {
-                const [corridas, suciedadData] = await Promise.all([
-                    fetchSeguro('getCorridas', ductoId),
-                    fetchSeguro('getSuciedadHistorico', ductoId)
-                ]);
-                if (corridas.length === 0) {
-                    corridaSelect.innerHTML = '<option value="">No hay corridas</option>';
-                    return;
-                }
-                corridaSelect.innerHTML = '<option value="">Seleccione una corrida</option>';
-                corridas.forEach(c => { corridaSelect.innerHTML += `<option value="${c.id}">Nº ${c.nro} (${c.fecha})</option>`; });
-                corridaSelect.disabled = false;
-                drawSuciedadChart(suciedadData);
-            } catch (error) {
-                if (mensajeDiv) mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar datos del ducto: ${error.message}</p>`;
-            }
-        }
-        async function cargarResultados() {
-             const corridaId = document.getElementById('corrida-select').value;
-            const resultadosContainer = document.getElementById('resultados-container');
-            const mensajeDiv = document.getElementById('mensaje');
-            if (!corridaId) {
-                resultadosContainer.classList.add('hidden');
-                drawHistoricoChart(null);
-                return;
-            }
-            if(mensajeDiv) {
-                mensajeDiv.innerHTML = '<p>Cargando datos...</p>';
-                mensajeDiv.classList.remove('hidden');
-            }
-            try {
-                const data = await fetchSeguro('getHistorico', corridaId);
-                const resumenDiv = document.getElementById('resumen-corrida');
-                const tablaBodyHistorial = document.querySelector('#tabla-historico tbody');
-                let suciedadHtml = data.resumen.suciedadKg !== null ? 
-                    `<p><strong>Residuos [kg]:</strong> ${data.resumen.suciedadKg.toFixed(2)}</p>` : 
-                    `<p><strong>Residuos [kg]:</strong> N/D</p>`;
-                resumenDiv.innerHTML = `<p><strong>Ducto:</strong> ${data.resumen.nombreDucto}</p><p><strong>Nº Limpieza:</strong> ${data.resumen.nroLimpieza}</p><p><strong>Fecha:</strong> ${data.resumen.fecha}</p><p><strong>Duración Total:</strong> ${data.resumen.duracion}</p>${suciedadHtml}`;
-                tablaBodyHistorial.innerHTML = '';
-                data.tabla.forEach(cp => {
-                    tablaBodyHistorial.innerHTML += `<tr><td>${cp.nombre}</td><td>${cp.progresiva.toLocaleString('es-AR')}</td><td>${cp.horario}</td></tr>`;
-                });
-                drawHistoricoChart(data.checkpoints);
-                if(mensajeDiv) mensajeDiv.classList.add('hidden');
-                resultadosContainer.classList.remove('hidden');
-            } catch (error) {
-                if(mensajeDiv) mensajeDiv.innerHTML = `<p style="color: red;">Error al cargar resultados: ${error.message}</p>`;
-                resultadosContainer.classList.add('hidden');
-            }
-        }
-        function drawHistoricoChart(checkpoints) {
-            const chartCanvasHistorial = document.getElementById('velocityChartHistorico');
-            if (historicoChart) { historicoChart.destroy(); }
-            if (!checkpoints || checkpoints.length < 2) {
-                if (chartCanvasHistorial) chartCanvasHistorial.getContext('2d').clearRect(0, 0, chartCanvasHistorial.width, chartCanvasHistorial.height);
-                return;
-            };
-            const labels = [], data = [];
-            for (let i = 1; i < checkpoints.length; i++) {
-                const pAnt = checkpoints[i-1], pAct = checkpoints[i];
-                const dist = pAct.progresiva_mts - pAnt.progresiva_mts;
-                const tiempoSeg = (new Date(pAct.fechaHora).getTime() - new Date(pAnt.fechaHora).getTime()) / 1000;
-                if (tiempoSeg > 0 && dist > 0) {
-                    labels.push(`${pAnt.nombre} -> ${pAct.nombre}`);
-                    data.push(((dist / tiempoSeg) * 3.6).toFixed(2));
-                }
-            }
-            historicoChart = new Chart(chartCanvasHistorial, {
-                type: 'bar',
-                data: { labels, datasets: [
-                    { type: 'bar', label: 'Velocidad (km/h)', data, backgroundColor: 'rgba(26, 35, 126, 0.6)', order: 2 },
-                    { type: 'line', label: 'Tendencia', data, borderColor: '#e53935', fill: false, tension: 0.1, order: 1 }
-                ]},
-                options: { scales: { y: { beginAtZero: true, title: { display: true, text: 'Velocidad (km/h)'} } }, plugins: { legend: { display: false } } }
-            });
-        }
-        function drawSuciedadChart(suciedadData) {
-            const chartCanvasSuciedad = document.getElementById('suciedadChart');
-            if (suciedadChart) { suciedadChart.destroy(); }
-            if (!suciedadData || suciedadData.length === 0) {
-                if (chartCanvasSuciedad) chartCanvasSuciedad.getContext('2d').clearRect(0, 0, chartCanvasSuciedad.width, chartCanvasSuciedad.height);
-                return;
-            };
-            const labels = suciedadData.map(d => `Nº ${d.nro} (${d.fecha})`);
-            const data = suciedadData.map(d => d.suciedadKg);
-            suciedadChart = new Chart(chartCanvasSuciedad, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Suciedad (kg)',
-                        data: data,
-                        backgroundColor: 'rgba(139, 69, 19, 0.6)',
-                        borderColor: 'rgba(139, 69, 19, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Residuos (kg)' } } },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        // --- Lógica de "Programación" (sin cambios) ---
-        async function cargarProgramacion() {
-            const container = document.getElementById('resumen-ductos-container');
-            const calendarContainer = document.getElementById('calendar-grid');
-            try {
-                container.innerHTML = `<div class="message-box"><p>Calculando programación...</p></div>`;
-                calendarioData = await fetchSeguro('getProgramacionData');
-                renderResumenDuctos(calendarioData);
-                renderCalendario(currentCalendarDate);
-                programacionCargada = true;
-            } catch (error) {
-                container.innerHTML = `<div class="message-box"><p style="color:red;">Error al cargar la programación: ${error.message}</p></div>`;
-            }
-        }
-        function renderResumenDuctos(ductos) {
-            const container = document.getElementById('resumen-ductos-container');
-            container.innerHTML = '';
-            if (!ductos || ductos.length === 0) {
-                container.innerHTML = `<div class="message-box"><p>No hay ductos para mostrar.</p></div>`;
-                return;
-            }
-            ductos.sort((a, b) => {
-                if (!a.proximaLimpieza) return 1;
-                if (!b.proximaLimpieza) return -1;
-                return new Date(a.proximaLimpieza) - new Date(b.proximaLimpieza);
-            });
-            ductos.forEach(d => {
-                const card = document.createElement('div');
-                card.className = 'ducto-card';
-                const hoy = new Date();
-                hoy.setHours(0,0,0,0);
-                const proxFecha = d.proximaLimpieza ? new Date(d.proximaLimpieza) : null;
-                let statusClass = '';
-                let statusText = 'OK';
-                if (proxFecha) {
-                    if (proxFecha < hoy) {
-                        statusClass = 'status-overdue';
-                        statusText = 'ATRASADA';
-                    } else if (proxFecha.getTime() === hoy.getTime()) {
-                        statusClass = 'status-due';
-                        statusText = 'VENCE HOY';
+            if (chatForm) {
+                chatForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const userMessage = chatInput.value.trim();
+                    if (!userMessage) return;
+                    addMessage(userMessage, 'user');
+                    chatInput.value = '';
+                    addMessage('Pensando...', 'bot', true);
+                    try {
+                        const token = sessionStorage.getItem('authToken');
+                        const historyParam = conversationHistory.length > 0 ? `&history=${encodeURIComponent(JSON.stringify(conversationHistory))}` : '';
+                        const url = `${SCRIPT_URL}?action=askAI&token=${token}&question=${encodeURIComponent(userMessage)}${historyParam}`;
+                        const response = await fetch(url);
+                        const result = await response.json();
+                        const thinkingMessage = document.querySelector('.thinking');
+                        if (thinkingMessage) thinkingMessage.remove();
+                        const botMessage = result.error || result.answer;
+                        addMessage(botMessage, 'bot');
+                        conversationHistory.push({ "role": "user", "content": userMessage });
+                        conversationHistory.push({ "role": "assistant", "content": botMessage });
+                    } catch (error) {
+                        const thinkingMessage = document.querySelector('.thinking');
+                        if (thinkingMessage) thinkingMessage.remove();
+                        addMessage('Hubo un error de conexión con el asistente.', 'bot');
                     }
-                }
-                card.style.borderLeftColor = statusClass === 'status-overdue' ? '#d32f2f' : (statusClass === 'status-due' ? '#f57c00' : '#1e88e5');
-                const tiempoPromedioStr = d.tiempoPromedioMin > 0 ? `${Math.floor(d.tiempoPromedioMin / 60)}h ${d.tiempoPromedioMin % 60}m` : 'N/D';
-                const ultimaLimpiezaStr = d.ultimaLimpieza ? new Date(d.ultimaLimpieza).toLocaleDateString('es-AR') : 'N/A';
-                const proximaLimpiezaStr = proxFecha ? `${proxFecha.toLocaleDateString('es-AR')} <span class="${statusClass}">(${statusText})</span>` : 'No programada';
-                card.innerHTML = `
-                    <h3>${d.nombre}</h3>
-                    <div class="ducto-card-grid">
-                        <p><strong>Próxima Limpieza:</strong> ${proximaLimpiezaStr}</p>
-                        <p><strong>Última Limpieza:</strong> ${ultimaLimpiezaStr}</p>
-                        <p><strong>Frecuencia:</strong> ${d.frecuencia}</p>
-                        <p><strong>Tiempo Promedio:</strong> ${tiempoPromedioStr}</p>
-                        <p><strong>Corridas Completas:</strong> ${d.corridasTotales}</p>
-                        <p><strong>Corridas Canceladas:</strong> ${d.corridasCanceladas}</p>
-                        <p><strong>Longitud:</strong> ${d.longitud.toLocaleString('es-AR')} mts</p>
-                        <p><strong>Diámetro:</strong> ${d.diametro}"</p>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
-        }
-        function renderCalendario(date) {
-            const container = document.getElementById('calendar-grid');
-            const title = document.getElementById('calendar-title');
-            container.innerHTML = '';
-            const month = date.getMonth();
-            const year = date.getFullYear();
-            title.textContent = `${date.toLocaleString('es-AR', { month: 'long', year: 'numeric' }).toUpperCase()}`;
-            const firstDayOfMonth = new Date(year, month, 1).getDay();
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            const diasSemana = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
-            diasSemana.forEach(dia => {
-                const headerCell = document.createElement('div');
-                headerCell.className = 'calendar-header';
-                headerCell.textContent = dia;
-                container.appendChild(headerCell);
-            });
-            for (let i = 0; i < firstDayOfMonth; i++) {
-                container.innerHTML += `<div class="calendar-day other-month"></div>`;
-            }
-            for (let day = 1; day <= daysInMonth; day++) {
-                const dayCell = document.createElement('div');
-                dayCell.className = 'calendar-day';
-                dayCell.innerHTML = `<div class="day-number">${day}</div>`;
-                const currentDate = new Date(year, month, day);
-                const eventos = calendarioData.filter(d => {
-                    if (!d.proximaLimpieza) return false;
-                    const eventDate = new Date(d.proximaLimpieza);
-                    return eventDate.getFullYear() === year && eventDate.getMonth() === month && eventDate.getDate() === day;
                 });
-                eventos.forEach(evento => {
-                    const eventDiv = document.createElement('div');
-                    eventDiv.className = 'calendar-event';
-                    eventDiv.textContent = evento.nombre;
-                    dayCell.appendChild(eventDiv);
-                });
-                container.appendChild(dayCell);
             }
-        }
-        function changeMonth(offset) {
-            currentCalendarDate.setMonth(currentCalendarDate.getMonth() + offset);
-            renderCalendario(currentCalendarDate);
-        }
-
+            function addMessage(text, sender, isThinking = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `chat-message ${sender}`;
+                if(isThinking) { messageDiv.classList.add('thinking'); }
+                messageDiv.textContent = text;
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        });
     </script>
 </body>
 </html>
